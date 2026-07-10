@@ -1,0 +1,17 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+.venv/
+venv/
+env/
+
+.separator_models/
+Applio/
+outputs/
+training_datasets/
+voice_models/
+
+*.log
+*.tmp

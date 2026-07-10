@@ -1,0 +1,11 @@
+# AI Cover Studio — install with:  pip install -r requirements.txt
+# Python 3.10 or 3.11 strongly recommended (rvc-python's deps break on 3.12+).
+# ffmpeg must also be installed on the system (brew install ffmpeg).
+
+torch
+torchaudio
+gradio
+rvc-python
+audio-separator[cpu]        # use audio-separator[gpu] on NVIDIA machines
+pedalboard
+pydub
