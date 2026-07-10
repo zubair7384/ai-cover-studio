@@ -133,6 +133,17 @@ def resolve_model_paths(model_name: str) -> tuple[Path, Path | None]:
             "Drop the .pth file there and press Refresh."
         )
     index = next(iter(MODELS_DIR.glob(f"{model_name}*.index")), None)
+    if index is None:
+        # Many downloaded models ship an index named e.g. "added_IVF1040_…"
+        # that shares no prefix with the .pth. If exactly one index file in
+        # the folder isn't claimed by another model's name, pair it up.
+        others = [m for m in list_voice_models() if m != model_name]
+        orphans = [p for p in MODELS_DIR.glob("*.index")
+                   if not any(p.name.startswith(m) for m in others)]
+        if len(orphans) == 1:
+            index = orphans[0]
+            log.info("Pairing orphan index '%s' with model '%s'.",
+                     index.name, model_name)
     return pth, index
 
 
@@ -691,6 +702,13 @@ def train_voice_model(sample_files, dataset_dir, model_name, sample_rate, epochs
                 APPLIO_DIR, tail, "download Applio base models",
             )
 
+        # Applio's weight export reads assets/config.json but only its web UI
+        # creates that file — without it the final .pth is silently never
+        # written (the error is lost in an os._exit before stdout flushes).
+        assets_cfg = APPLIO_DIR / "assets" / "config.json"
+        if not assets_cfg.exists():
+            assets_cfg.write_text('{"model_author": null}')
+
         # -- the actual pipeline ------------------------------------------
         steps = [
             (0.30, "1/4 preprocessing dataset",
@@ -752,55 +770,230 @@ def train_voice_model(sample_files, dataset_dir, model_name, sample_rate, epochs
 # ---------------------------------------------------------------------------
 # Gradio UI
 # ---------------------------------------------------------------------------
-def build_app() -> gr.Blocks:
-    with gr.Blocks(title="AI Cover Studio", theme=gr.themes.Soft()) as app:
-        gr.Markdown(
-            f"""
-# 🎤 AI Cover Studio
-Local AI song covers — HTDemucs separation → RVC voice clone (RMVPE) →
-Pedalboard polish → pydub mixdown. Running on **{DEVICE.upper()}**.
-*Use only songs and voices you have the rights and consent to use.*
+CARD, BORDER, ACCENT = "#131B2E", "#1E293B", "#6366F1"
+
+
+def _build_theme():
+    """Pure-black dark mode + clean light mode, restrained indigo accent."""
+    theme = gr.themes.Base(
+        primary_hue=gr.themes.colors.indigo,
+        neutral_hue=gr.themes.colors.slate,
+        font=[gr.themes.GoogleFont("Inter"), "system-ui", "sans-serif"],
+    )
+    light = {
+        "body_background_fill": "#FFFFFF",
+        "background_fill_primary": "#FFFFFF",
+        "background_fill_secondary": "#F8FAFC",
+        "block_background_fill": "#F8FAFC",
+        "panel_background_fill": "#F8FAFC",
+        "block_border_color": "#E2E8F0",
+        "border_color_primary": "#E2E8F0",
+        "input_background_fill": "#FFFFFF",
+        "input_border_color": "#E2E8F0",
+        "block_title_background_fill": "transparent",
+        "block_title_text_color": "#64748B",
+        "block_label_background_fill": "transparent",
+        "block_label_text_color": "#64748B",
+        "block_info_text_color": "#94A3B8",
+        "body_text_color": "#0F172A",
+        "body_text_color_subdued": "#64748B",
+        "slider_color": ACCENT,
+        "button_primary_background_fill": ACCENT,
+        "button_primary_background_fill_hover": "#818CF8",
+        "button_primary_text_color": "#FFFFFF",
+        "button_secondary_background_fill": "#F1F5F9",
+        "button_secondary_border_color": "#E2E8F0",
+        "button_secondary_text_color": "#334155",
+    }
+    dark = {
+        "body_background_fill": "#000000",
+        "background_fill_primary": "#000000",
+        "background_fill_secondary": CARD,
+        "block_background_fill": CARD,
+        "panel_background_fill": CARD,
+        "block_border_color": BORDER,
+        "border_color_primary": BORDER,
+        "input_background_fill": "#0B0F19",
+        "input_border_color": BORDER,
+        "block_title_background_fill": "transparent",
+        "block_title_text_color": "#94A3B8",
+        "block_label_background_fill": "transparent",
+        "block_label_text_color": "#94A3B8",
+        "block_info_text_color": "#64748B",
+        "body_text_color": "#E2E8F0",
+        "body_text_color_subdued": "#94A3B8",
+        "slider_color": ACCENT,
+        "button_primary_background_fill": ACCENT,
+        "button_primary_background_fill_hover": "#818CF8",
+        "button_primary_text_color": "#FFFFFF",
+        "button_secondary_background_fill": CARD,
+        "button_secondary_border_color": BORDER,
+        "button_secondary_text_color": "#CBD5E1",
+    }
+    settings = dict(light)
+    settings.update({f"{key}_dark": value for key, value in dark.items()})
+    return theme.set(
+        block_title_text_weight="500",
+        block_radius="12px",
+        button_large_radius="10px",
+        **settings,
+    )
+
+
+CSS = """
+/* palette hooks for custom elements — flip with the .dark class */
+:root {--ac-card: #F8FAFC; --ac-border: #E2E8F0; --ac-strong: #0F172A;
+       --ac-text: #475569; --ac-muted: #64748B; --ac-faint: #94A3B8;
+       --ac-dash: #CBD5E1;}
+.dark {--ac-card: #131B2E; --ac-border: #1E293B; --ac-strong: #F1F5F9;
+       --ac-text: #CBD5E1; --ac-muted: #94A3B8; --ac-faint: #475569;
+       --ac-dash: #273349;}
+
+.gradio-container {max-width: 1180px !important; margin: 0 auto !important;}
+footer {display: none !important;}
+
+/* -- header ------------------------------------------------------------ */
+#app-header {display: flex; justify-content: space-between; align-items: center;
+             padding: 20px 4px 4px;}
+#app-header h1 {font-size: 1.55rem; font-weight: 650; letter-spacing: -0.02em;
+                margin: 0; color: var(--ac-strong);}
+#app-header .tagline {color: var(--ac-muted); margin: 3px 0 0; font-size: 0.9rem;}
+#app-header .hdr-right {display: flex; gap: 8px; align-items: center;}
+#app-header .badge {background: var(--ac-card); border: 1px solid var(--ac-border);
+                    color: var(--ac-muted); border-radius: 999px; padding: 4px 14px;
+                    font-size: 0.75rem; font-weight: 500; white-space: nowrap;}
+#app-header .theme-btn {cursor: pointer; font-size: 0.85rem; line-height: 1;
+                        padding: 5px 12px;}
+#app-header .theme-btn:hover {border-color: #6366F1; color: var(--ac-strong);}
+
+/* -- pipeline steps in the "How it works" panel ------------------------- */
+.steps {display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+        color: var(--ac-text); font-size: 0.88rem; padding: 2px 0 6px;}
+.steps b {color: var(--ac-strong); font-weight: 600;}
+.steps .arr {color: var(--ac-faint);}
+.consent {color: var(--ac-muted); font-size: 0.8rem; margin-top: 4px;}
+
+/* -- cards & labels ------------------------------------------------------ */
+.block-title, .block-label {border: none !important;}
+
+/* dashed upload zones */
+.dropzone {border: 1.5px dashed var(--ac-dash) !important; background: transparent !important;}
+.dropzone:hover {border-color: #6366F1 !important;}
+
+/* output placeholder — hidden once real content arrives */
+.ph {color: var(--ac-faint); font-size: 0.85rem; text-align: center; padding: 6px 0 10px;}
+.output-card:has(audio) .ph, .output-card:has(canvas) .ph,
+.output-card:has(.prose p) .ph, .output-card:has(.prose h2) .ph,
+.output-card:has(.prose h3) .ph {display: none;}
+
+/* tip banner on the training tab */
+.tip-banner {background: var(--ac-card); border: 1px solid var(--ac-border);
+             border-left: 3px solid #F59E0B; border-radius: 10px;
+             padding: 12px 16px; color: var(--ac-text); font-size: 0.88rem;
+             margin: 4px 0 10px;}
+.tip-banner b {color: var(--ac-strong);}
+
+/* slimmer sliders */
+input[type="range"] {height: 4px !important;}
+input[type="range"]::-webkit-slider-thumb {width: 14px; height: 14px;}
+
+/* the loud elements — one per tab */
+#generate-btn, #train-btn {
+    background: linear-gradient(90deg, #6366F1, #8B5CF6) !important;
+    border: none !important; font-weight: 600; letter-spacing: 0.01em;
+    color: #fff !important;
+    box-shadow: 0 8px 24px rgba(99, 102, 241, 0.25);}
+#generate-btn:hover, #train-btn:hover {filter: brightness(1.1);}
 """
-        )
+
+HEADER_HTML = f"""
+<div id="app-header">
+  <div>
+    <h1>AI Cover Studio</h1>
+    <p class="tagline">Turn any song into a cover in a voice you own — fully local.</p>
+  </div>
+  <div class="hdr-right">
+    <span class="badge">{"⚡ GPU" if DEVICE.startswith("cuda") else "CPU Mode"}</span>
+    <button class="badge theme-btn" title="Toggle light / dark mode"
+      onclick="(function(){{
+        const dark = document.body.classList.toggle('dark');
+        document.documentElement.classList.toggle('dark', dark);
+      }})()">◐</button>
+  </div>
+</div>
+"""
+
+PIPELINE_HTML = """
+<div class="steps">
+  <b>1&thinsp;·&thinsp;Separate</b><span>HTDemucs</span><span class="arr">→</span>
+  <b>2&thinsp;·&thinsp;Clone</b><span>RVC · RMVPE</span><span class="arr">→</span>
+  <b>3&thinsp;·&thinsp;Polish</b><span>Pedalboard</span><span class="arr">→</span>
+  <b>4&thinsp;·&thinsp;Mix</b><span>pydub</span>
+</div>
+<p class="consent">Everything runs on your machine. Use only songs and voices
+you have the rights and consent to use.</p>
+"""
+
+TIPS_HTML = """
+<div class="tip-banner"><b>Dataset tips:</b> 10–30 minutes of clean, dry vocals
+(no reverb, no background music), one speaker only. Singing beats read speech
+for song covers. Use consented voices only.</div>
+"""
+
+
+def build_app() -> gr.Blocks:
+    with gr.Blocks(title="AI Cover Studio") as app:
+        gr.HTML(HEADER_HTML)
+        with gr.Accordion("How it works", open=False):
+            gr.HTML(PIPELINE_HTML)
 
         with gr.Tabs():
             # ------------------------- Tab 1: inference -------------------
-            with gr.Tab("🎵 AI Vocal Swapper"):
+            with gr.Tab("Vocal Swapper"):
                 with gr.Row():
                     with gr.Column(scale=1):
-                        model_dd = gr.Dropdown(
-                            choices=list_voice_models(),
-                            label="Voice model (.pth in ./voice_models)",
-                            info=f"Folder: {MODELS_DIR}",
-                        )
-                        refresh_btn = gr.Button("🔄 Refresh model list", size="sm")
+                        with gr.Group():
+                            model_dd = gr.Dropdown(
+                                choices=list_voice_models(),
+                                label="Voice model",
+                                info="From ./voice_models",
+                            )
+                            refresh_btn = gr.Button("Refresh model list",
+                                                    size="sm")
                         song_in = gr.Audio(
-                            label="Full song (.mp3 / .wav)",
+                            label="Full song",
                             type="filepath",
                             sources=["upload"],
+                            elem_classes="dropzone",
                         )
-                        pitch = gr.Slider(
-                            -12, 12, value=0, step=1,
-                            label="Pitch shift (semitones)",
-                            info="+12 when covering a male song with a female voice; -12 for the reverse.",
-                        )
-                        index_rate = gr.Slider(
-                            0.0, 1.0, value=0.75, step=0.05,
-                            label="Index rate (timbre strength)",
-                        )
-                        vocal_gain = gr.Slider(
-                            -10, 10, value=0, step=0.5,
-                            label="Vocal level in mix (dB)",
-                        )
-                        go_btn = gr.Button("🎧 Generate Cover", variant="primary")
+                        with gr.Group():
+                            pitch = gr.Slider(
+                                -12, 12, value=0, step=1,
+                                label="Pitch shift",
+                                info="Semitones. +12 male song → female voice; -12 for the reverse.",
+                            )
+                            index_rate = gr.Slider(
+                                0.0, 1.0, value=0.75, step=0.05,
+                                label="Timbre strength",
+                            )
+                            vocal_gain = gr.Slider(
+                                -10, 10, value=0, step=0.5,
+                                label="Vocal level",
+                                info="dB in the final mix.",
+                            )
 
                     with gr.Column(scale=1):
-                        cover_out = gr.Audio(
-                            label="Final mixed cover",
-                            type="filepath",
-                            interactive=False,
-                        )
-                        status_md = gr.Markdown("")
+                        with gr.Group(elem_classes="output-card"):
+                            cover_out = gr.Audio(
+                                label="Final mixed cover",
+                                type="filepath",
+                                interactive=False,
+                            )
+                            gr.HTML('<div class="ph">Your generated track will appear here.</div>')
+                            status_md = gr.Markdown("")
+
+                go_btn = gr.Button("Generate Cover", variant="primary",
+                                   elem_id="generate-btn")
 
                 refresh_btn.click(
                     lambda: gr.update(choices=list_voice_models()),
@@ -813,39 +1006,50 @@ Pedalboard polish → pydub mixdown. Running on **{DEVICE.upper()}**.
                 )
 
             # ------------------------- Tab 2: training --------------------
-            with gr.Tab("🧬 Voice Clone Training (Guide)"):
-                gr.Markdown(TRAINING_INTRO)
+            with gr.Tab("Voice Clone Training"):
+                gr.HTML(TIPS_HTML)
                 with gr.Row():
-                    with gr.Column():
+                    with gr.Column(scale=1):
                         sample_files = gr.File(
-                            label="Drag & drop your voice samples (.mp3 / .wav / .flac …)",
+                            label="Voice samples",
                             file_count="multiple",
                             file_types=["audio"],
+                            elem_classes="dropzone",
                         )
-                        ds_dir = gr.Textbox(
-                            label="…or path to an existing sample folder",
-                            placeholder="/Users/you/voice_dataset",
-                            info="Ignored when files are dropped above.",
-                        )
-                        tr_name = gr.Textbox(label="New model name",
-                                             placeholder="my_voice")
-                        tr_sr = gr.Dropdown(SAMPLE_RATE_CHOICES, value="40000",
-                                            label="Training sample rate")
-                        tr_epochs = gr.Slider(50, 1000, value=300, step=50,
-                                              label="Epochs")
-                        train_btn = gr.Button("🚀 Train voice model",
-                                              variant="primary")
-                        gr.Markdown(
-                            "*First run downloads the Applio trainer (~2 GB). "
-                            f"Training on **{DEVICE}** "
-                            + ("is fast." if DEVICE.startswith("cuda")
-                               else "can take a long time — a GPU is strongly recommended.")
-                            + "*"
-                        )
-                        plan_btn = gr.Button("📋 Just show me the commands",
-                                             size="sm")
-                    with gr.Column():
-                        plan_out = gr.Markdown("")
+                        with gr.Group():
+                            ds_dir = gr.Textbox(
+                                label="…or existing folder path",
+                                placeholder="/Users/you/voice_dataset",
+                                info="Ignored when files are dropped above.",
+                            )
+                            with gr.Row():
+                                tr_name = gr.Textbox(label="Model name",
+                                                     placeholder="my_voice",
+                                                     scale=2)
+                                tr_sr = gr.Dropdown(SAMPLE_RATE_CHOICES,
+                                                    value="40000",
+                                                    label="Sample rate", scale=1)
+                            tr_epochs = gr.Slider(50, 1000, value=300, step=50,
+                                                  label="Epochs")
+
+                    with gr.Column(scale=1):
+                        with gr.Group(elem_classes="output-card"):
+                            gr.HTML('<div class="ph">Training progress will appear here.</div>')
+                            plan_out = gr.Markdown("")
+                        with gr.Accordion("How training works", open=False):
+                            gr.Markdown(TRAINING_INTRO)
+
+                train_btn = gr.Button("Train Voice Model", variant="primary",
+                                      elem_id="train-btn")
+                gr.HTML(
+                    '<p class="consent" style="text-align:center">'
+                    "First run downloads the Applio trainer (~2 GB). Training on "
+                    f"{DEVICE.upper()} "
+                    + ("is fast." if DEVICE.startswith("cuda")
+                       else "can take a long time — a GPU is strongly recommended.")
+                    + "</p>"
+                )
+                plan_btn = gr.Button("Show me the commands instead", size="sm")
 
                 train_btn.click(
                     train_voice_model,
@@ -868,4 +1072,5 @@ if __name__ == "__main__":
             "Install it first (macOS: `brew install ffmpeg`)."
         )
     log.info("Voice models found: %s", list_voice_models() or "none yet")
-    build_app().launch(server_name="127.0.0.1", inbrowser=True)
+    build_app().launch(server_name="127.0.0.1", inbrowser=True,
+                       theme=_build_theme(), css=CSS)
