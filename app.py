@@ -995,10 +995,13 @@ def build_app() -> gr.Blocks:
                 go_btn = gr.Button("Generate Cover", variant="primary",
                                    elem_id="generate-btn")
 
-                refresh_btn.click(
-                    lambda: gr.update(choices=list_voice_models()),
-                    outputs=model_dd,
-                )
+                def _refresh_models():
+                    return gr.update(choices=list_voice_models())
+
+                refresh_btn.click(_refresh_models, outputs=model_dd)
+                # Re-scan voice_models/ on every page load so models added
+                # while the app is running show up without a manual refresh.
+                app.load(_refresh_models, outputs=model_dd)
                 go_btn.click(
                     generate_cover,
                     inputs=[model_dd, song_in, pitch, index_rate, vocal_gain],
