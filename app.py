@@ -679,6 +679,18 @@ def train_voice_model(sample_files, dataset_dir, model_name, sample_rate, epochs
             )
             APPLIO_DEPS_OK.touch()
 
+        # Applio's CLI assumes its predictor/pretrained models exist but never
+        # fetches them itself — without this, pitch extraction silently writes
+        # nothing and training "succeeds" with an empty filelist.
+        if not (APPLIO_DIR / "rvc" / "models" / "predictors" / "rmvpe.pt").exists():
+            progress(0.2, desc="Downloading Applio base models (one time)…")
+            yield panel("downloading Applio base models (one time)…")
+            yield from _stream(
+                [APPLIO_PY, "core.py", "prerequisites", "--models", "True",
+                 "--pretraineds_hifigan", "True", "--exe", "False"],
+                APPLIO_DIR, tail, "download Applio base models",
+            )
+
         # -- the actual pipeline ------------------------------------------
         steps = [
             (0.30, "1/4 preprocessing dataset",
