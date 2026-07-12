@@ -37,17 +37,27 @@ Write-Host "==> Bundled interpreter:"
 & $Py --version
 
 Write-Host "==> Installing desktop requirements into the runtime (this is large)…"
-# PowerShell's call operator does NOT throw on a non-zero native exit code, so
-# check $LASTEXITCODE after each pip run or a failed install slips through green.
-& $Py -m pip install --upgrade pip
-if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed (exit $LASTEXITCODE)" }
+# rvc-python's transitive pins (numpy<=1.23.5, faiss-cpu==1.7.3, omegaconf==2.0.6)
+# are mutually inconsistent with audio-separator/torch under a strict resolver, yet
+# the *installed* set works fine at runtime — it's the same state a working dev
+# machine converges to. Reproduce it exactly from the lockfile with --no-deps so no
+# resolution happens. pip 24.0 is used because 24.1+ rejects omegaconf 2.0.6's
+# non-standard 'PyYAML>=5.1.*' specifier ("no matching distribution").
+# PowerShell's call operator does NOT throw on non-zero native exit codes, so
+# every pip call is followed by an explicit $LASTEXITCODE check.
+& $Py -m pip install "pip==24.0"
+if ($LASTEXITCODE -ne 0) { throw "pip pin to 24.0 failed (exit $LASTEXITCODE)" }
 
-& $Py -m pip install -r (Join-Path $Repo "requirements-desktop.txt")
-if ($LASTEXITCODE -ne 0) { throw "pip install of requirements-desktop.txt failed (exit $LASTEXITCODE)" }
+# fairseq has no Windows wheel; it compiles from sdist and needs these at build time.
+& $Py -m pip install setuptools wheel "cython<3" "numpy==2.2.6"
+if ($LASTEXITCODE -ne 0) { throw "build-prereq install failed (exit $LASTEXITCODE)" }
+
+& $Py -m pip install --no-deps --no-build-isolation -r (Join-Path $Repo "requirements-desktop.lock.txt")
+if ($LASTEXITCODE -ne 0) { throw "locked requirements install failed (exit $LASTEXITCODE)" }
 
 # Fail the build here (not three steps later) if any critical import is missing.
 Write-Host "==> Verifying bundled imports…"
-& $Py -c "import torch, torchaudio, audio_separator, rvc_python, pedalboard, pydub, fastapi, uvicorn, multipart; print('all imports OK')"
+& $Py -c "import torch, torchaudio, audio_separator, rvc_python, fairseq, pedalboard, pydub, fastapi, uvicorn, multipart; print('all imports OK')"
 if ($LASTEXITCODE -ne 0) { throw "bundled runtime is missing required modules" }
 
 Write-Host "==> Trimming caches…"

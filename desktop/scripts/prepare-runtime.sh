@@ -50,11 +50,17 @@ PY="$RUNTIME/bin/python3"
 echo "==> Bundled interpreter: $($PY --version)"
 
 echo "==> Installing desktop requirements into the runtime (this is large)…"
-"$PY" -m pip install --upgrade pip
-"$PY" -m pip install -r "$REPO/requirements-desktop.txt"
+# rvc-python's transitive pins conflict with audio-separator/torch under a strict
+# resolver, yet the installed set works at runtime (the state a working dev machine
+# converges to). Reproduce it exactly from the lockfile with --no-deps. pip 24.0 is
+# used because 24.1+ rejects omegaconf 2.0.6's non-standard 'PyYAML>=5.1.*' specifier.
+"$PY" -m pip install "pip==24.0"
+# fairseq compiles from sdist on platforms without a wheel; provide build deps.
+"$PY" -m pip install setuptools wheel "cython<3" "numpy==2.2.6"
+"$PY" -m pip install --no-deps --no-build-isolation -r "$REPO/requirements-desktop.lock.txt"
 
 echo "==> Verifying bundled imports…"
-"$PY" -c "import torch, torchaudio, audio_separator, rvc_python, pedalboard, pydub, fastapi, uvicorn, multipart; print('all imports OK')"
+"$PY" -c "import torch, torchaudio, audio_separator, rvc_python, fairseq, pedalboard, pydub, fastapi, uvicorn, multipart; print('all imports OK')"
 
 echo "==> Trimming caches to shrink the bundle…"
 find "$RUNTIME" -type d -name "__pycache__" -prune -exec rm -rf {} + 2>/dev/null || true
