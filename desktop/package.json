@@ -1,0 +1,54 @@
+{
+  "name": "ai-cover-studio",
+  "productName": "AI Cover Studio",
+  "version": "1.0.0",
+  "description": "Fully local AI song-cover generator — train a voice and swap vocals on your own machine.",
+  "author": "AI Cover Studio",
+  "license": "MIT",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "ACS_DEV=1 electron .",
+    "dist": "electron-builder",
+    "dist:mac": "electron-builder --mac",
+    "dist:win": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "ai.coverstudio.desktop",
+    "productName": "AI Cover Studio",
+    "directories": {
+      "output": "../dist_installers",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*"
+    ],
+    "extraResources": [
+      { "from": "../engine.py", "to": "backend/engine.py" },
+      { "from": "../server.py", "to": "backend/server.py" },
+      { "from": "runtime", "to": "backend/runtime" },
+      { "from": "../Applio", "to": "backend/Applio", "filter": ["!**/.venv/**", "!**/logs/**", "!**/.git/**"] },
+      { "from": "../.separator_models", "to": "data_seed/.separator_models" }
+    ],
+    "mac": {
+      "category": "public.app-category.music",
+      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    },
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false
+    }
+  }
+}

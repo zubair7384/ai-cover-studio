@@ -15,3 +15,9 @@ voice_models/
 
 *.log
 *.tmp
+
+# Electron desktop build artifacts
+desktop/node_modules/
+desktop/runtime/
+desktop/.rt_tmp/
+dist_installers/

@@ -1,0 +1,63 @@
+name: Build Windows installer
+
+# Builds the AI Cover Studio Windows (.exe) installer on a real Windows runner,
+# because the bundled PyTorch/RVC runtime is platform-native and cannot be
+# cross-built from macOS/Linux. Run it from the "Actions" tab (Run workflow) or
+# by pushing a tag like v1.0.0. The installer is uploaded as an artifact you
+# can download from the run's summary page.
+
+on:
+  workflow_dispatch:      # manual "Run workflow" button
+  push:
+    tags: ["v*"]
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # Applio's trainer source is git-ignored and not in the repo; clone it so
+      # electron-builder can bundle it offline (its venv/logs/.git are filtered
+      # out in package.json). Depth 1 keeps it small.
+      - name: Fetch Applio trainer source
+        run: git clone --depth 1 https://github.com/IAHispano/Applio.git Applio
+
+      # Build the self-contained Windows Python runtime with all ML deps.
+      - name: Build bundled Python runtime
+        working-directory: desktop
+        run: powershell -ExecutionPolicy Bypass -File scripts/prepare-runtime.ps1
+
+      # Pre-download the HTDemucs separation weights into .separator_models so
+      # the shipped app converts fully offline on first launch.
+      - name: Pre-fetch separation weights
+        run: |
+          desktop/runtime/python.exe -c "import os; from audio_separator.separator import Separator; s=Separator(model_file_dir=os.path.abspath('.separator_models')); s.load_model(model_filename='htdemucs.yaml'); print('weights cached')"
+
+      - name: Install Electron build deps
+        working-directory: desktop
+        run: npm ci || npm install
+
+      - name: Build installer
+        working-directory: desktop
+        run: npm run dist:win
+        env:
+          # Unsigned build. To sign, add CSC_LINK / CSC_KEY_PASSWORD secrets and
+          # they'll be picked up automatically by electron-builder.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-Cover-Studio-Windows
+          path: dist_installers/*.exe
+          if-no-files-found: error
+          retention-days: 14

@@ -1,0 +1,18 @@
+# AI Cover Studio — Python deps bundled inside the desktop app's runtime.
+# Installed into desktop/runtime by scripts/prepare-runtime.*  (NOT the dev .venv).
+#
+# Everything the engine + FastAPI sidecar need at runtime. Gradio is NOT here
+# on purpose — the desktop UI is the Electron renderer, not Gradio.
+
+# --- ML / audio pipeline (same versions as the dev app) ---
+torch
+torchaudio
+rvc-python
+audio-separator[cpu]        # swap for audio-separator[gpu] on an NVIDIA build
+pedalboard
+pydub
+
+# --- web sidecar ---
+fastapi
+uvicorn[standard]
+python-multipart            # required for FastAPI file uploads

@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI Cover Studio</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="dark">
+  <header id="app-header">
+    <div>
+      <h1>AI Cover Studio</h1>
+      <p class="tagline">Turn any song into a cover in a voice you own — fully local.</p>
+    </div>
+    <div class="hdr-right">
+      <span id="hw-badge" class="badge">…</span>
+      <button id="theme-btn" class="badge theme-btn" title="Toggle light / dark mode">◐</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="swap">🎵 Vocal Swapper</button>
+    <button class="tab" data-tab="train">🏋️ Voice Clone Training</button>
+  </nav>
+
+  <!-- ===================== TAB 1: Vocal Swapper ===================== -->
+  <main class="tab-panel active" id="tab-swap">
+    <div class="grid">
+      <section class="col">
+        <div class="card">
+          <label class="field-label">Voice model</label>
+          <div class="row">
+            <select id="model-select" class="input"></select>
+            <button id="refresh-btn" class="btn-secondary" title="Rescan voice models">🔄</button>
+          </div>
+          <div class="row">
+            <button id="import-btn" class="btn-secondary small">Import .pth / .index…</button>
+          </div>
+          <p class="hint" id="model-hint"></p>
+        </div>
+
+        <div class="card">
+          <label class="field-label">Full song</label>
+          <div id="song-drop" class="dropzone">
+            <input type="file" id="song-input" accept="audio/*" hidden />
+            <div class="dz-inner">
+              <div class="dz-icon">🎧</div>
+              <div class="dz-text">Drop a song here or <span class="link">browse</span></div>
+              <div class="dz-name" id="song-name"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="slider-field">
+            <label>Pitch shift <span class="val" id="pitch-val">0</span></label>
+            <input type="range" id="pitch" min="-12" max="12" step="1" value="0" />
+            <span class="hint">Semitones. +12 male song → female voice; −12 for the reverse.</span>
+          </div>
+          <div class="slider-field">
+            <label>Timbre strength <span class="val" id="index-val">0.75</span></label>
+            <input type="range" id="index-rate" min="0" max="1" step="0.05" value="0.75" />
+          </div>
+          <div class="slider-field">
+            <label>Vocal level <span class="val" id="gain-val">0</span> dB</label>
+            <input type="range" id="vocal-gain" min="-10" max="10" step="0.5" value="0" />
+          </div>
+        </div>
+      </section>
+
+      <section class="col">
+        <div class="card output-card">
+          <label class="field-label">Final mixed cover</label>
+          <div id="cover-result" class="result-empty">Your generated track will appear here.</div>
+          <div id="cover-actions" class="row hidden">
+            <button id="save-btn" class="btn-secondary small">💾 Save as…</button>
+            <button id="reveal-btn" class="btn-secondary small">📁 Show file</button>
+          </div>
+        </div>
+        <div class="card status-card">
+          <div class="status-head">
+            <span id="swap-step" class="status-step">Ready.</span>
+            <span id="swap-elapsed" class="status-elapsed"></span>
+          </div>
+          <div class="progress-track"><div id="swap-progress" class="progress-fill"></div></div>
+          <pre id="swap-log" class="logbox"></pre>
+        </div>
+      </section>
+    </div>
+    <button id="generate-btn" class="btn-primary big">Generate Cover</button>
+  </main>
+
+  <!-- ===================== TAB 2: Training ===================== -->
+  <main class="tab-panel" id="tab-train">
+    <div class="tip-banner">
+      <b>Dataset tips:</b> 10–30 minutes of clean, dry vocals (no reverb, no background music),
+      one speaker only. Singing beats read speech for song covers. Use consented voices only.
+    </div>
+    <div id="train-warning" class="warn-banner hidden"></div>
+    <div class="grid">
+      <section class="col">
+        <div class="card">
+          <label class="field-label">Voice samples</label>
+          <div id="samples-drop" class="dropzone">
+            <input type="file" id="samples-input" accept="audio/*" multiple hidden />
+            <div class="dz-inner">
+              <div class="dz-icon">🎤</div>
+              <div class="dz-text">Drop voice clips here or <span class="link">browse</span></div>
+              <div class="dz-name" id="samples-name"></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <label class="field-label">…or an existing folder path</label>
+          <div class="row">
+            <input type="text" id="dataset-dir" class="input" placeholder="/Users/you/voice_dataset" />
+            <button id="folder-btn" class="btn-secondary" title="Choose folder">📂</button>
+          </div>
+          <div class="row">
+            <div class="slider-field grow">
+              <label>Model name</label>
+              <input type="text" id="train-name" class="input" placeholder="my_voice" />
+            </div>
+            <div class="slider-field">
+              <label>Sample rate</label>
+              <select id="train-sr" class="input"></select>
+            </div>
+          </div>
+          <div class="slider-field">
+            <label>Epochs <span class="val" id="epochs-val">300</span></label>
+            <input type="range" id="epochs" min="50" max="1000" step="50" value="300" />
+          </div>
+        </div>
+      </section>
+      <section class="col">
+        <div class="card status-card tall">
+          <div class="status-head">
+            <span id="train-step" class="status-step">Ready to train.</span>
+            <span id="train-elapsed" class="status-elapsed"></span>
+          </div>
+          <div class="progress-track"><div id="train-progress" class="progress-fill"></div></div>
+          <pre id="train-log" class="logbox tall">Training progress will appear here.</pre>
+        </div>
+      </section>
+    </div>
+    <button id="train-btn" class="btn-primary big">Train Voice Model</button>
+    <p class="consent" id="train-note"></p>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
