@@ -53,6 +53,9 @@ echo "==> Installing desktop requirements into the runtime (this is large)…"
 "$PY" -m pip install --upgrade pip
 "$PY" -m pip install -r "$REPO/requirements-desktop.txt"
 
+echo "==> Verifying bundled imports…"
+"$PY" -c "import torch, torchaudio, audio_separator, rvc_python, pedalboard, pydub, fastapi, uvicorn, multipart; print('all imports OK')"
+
 echo "==> Trimming caches to shrink the bundle…"
 find "$RUNTIME" -type d -name "__pycache__" -prune -exec rm -rf {} + 2>/dev/null || true
 find "$RUNTIME" -type d -name "tests" -path "*/site-packages/*" -prune -exec rm -rf {} + 2>/dev/null || true

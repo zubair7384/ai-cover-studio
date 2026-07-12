@@ -37,8 +37,18 @@ Write-Host "==> Bundled interpreter:"
 & $Py --version
 
 Write-Host "==> Installing desktop requirements into the runtime (this is large)…"
+# PowerShell's call operator does NOT throw on a non-zero native exit code, so
+# check $LASTEXITCODE after each pip run or a failed install slips through green.
 & $Py -m pip install --upgrade pip
+if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed (exit $LASTEXITCODE)" }
+
 & $Py -m pip install -r (Join-Path $Repo "requirements-desktop.txt")
+if ($LASTEXITCODE -ne 0) { throw "pip install of requirements-desktop.txt failed (exit $LASTEXITCODE)" }
+
+# Fail the build here (not three steps later) if any critical import is missing.
+Write-Host "==> Verifying bundled imports…"
+& $Py -c "import torch, torchaudio, audio_separator, rvc_python, pedalboard, pydub, fastapi, uvicorn, multipart; print('all imports OK')"
+if ($LASTEXITCODE -ne 0) { throw "bundled runtime is missing required modules" }
 
 Write-Host "==> Trimming caches…"
 Get-ChildItem -Path $Runtime -Recurse -Directory -Filter "__pycache__" -ErrorAction SilentlyContinue |
