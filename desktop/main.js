@@ -230,6 +230,24 @@ ipcMain.handle("acs:pickModelFiles", async () => {
   return res.canceled ? [] : res.filePaths;
 });
 
+ipcMain.handle("acs:pickVoiceModel", async () => {
+  const res = await dialog.showOpenDialog(mainWindow, {
+    title: "Choose an RVC voice model",
+    properties: ["openFile"],
+    filters: [{ name: "RVC voice model", extensions: ["pth"] }],
+  });
+  return res.canceled ? "" : res.filePaths[0];
+});
+
+ipcMain.handle("acs:pickVoiceIndex", async () => {
+  const res = await dialog.showOpenDialog(mainWindow, {
+    title: "Choose the matching RVC index",
+    properties: ["openFile"],
+    filters: [{ name: "RVC feature index", extensions: ["index"] }],
+  });
+  return res.canceled ? "" : res.filePaths[0];
+});
+
 ipcMain.handle("acs:pickFolder", async () => {
   const res = await dialog.showOpenDialog(mainWindow, {
     title: "Choose a folder of voice samples",

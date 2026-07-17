@@ -1030,9 +1030,10 @@ screens.import = () => {
       <div class="import-step"><span>1</span><div><h3>Choose model files</h3><p>Select one trained <b>.pth</b> model. Add its <b>.index</b> file when available for better voice matching.</p></div></div>
       <button class="import-drop" id="choose-model" type="button">
         <span class="drop-icon">${icon("upload")}</span>
-        <span><b>Choose model files</b><small>.pth required · .index optional</small></span>
+        <span><b>Choose .pth model</b><small>Required · select one trained model</small></span>
       </button>
       <div class="selected-files" id="selected-files"></div>
+      <button class="index-picker" id="choose-index" type="button">${icon("plus")} <span>Add optional .index file</span></button>
       <div class="import-step details-step"><span>2</span><div><h3>Voice details</h3><p>This is how the voice will appear throughout Vocalis.</p></div></div>
       <label class="field-label" for="import-name">Voice name</label>
       <input class="input" id="import-name" placeholder="e.g. Studio Vocal" maxlength="80" />
@@ -1050,18 +1051,18 @@ screens.import = () => {
   nameInput.value = importWork.name;
   nameInput.oninput = () => { importWork.name = nameInput.value; updateImportPage(layout); };
   $("#choose-model", layout).onclick = async () => {
-    const paths = await window.acs.pickModelFiles();
-    if (!paths.length) return;
-    const pths = paths.filter((p) => p.toLowerCase().endsWith(".pth"));
-    const indexes = paths.filter((p) => p.toLowerCase().endsWith(".index"));
-    if (pths.length !== 1 || indexes.length > 1) {
-      $("#import-error", layout).textContent = "Select exactly one .pth file and no more than one .index file.";
-      return;
-    }
-    importWork.pthPath = pths[0];
-    importWork.indexPath = indexes[0] || "";
-    if (!importWork.name) importWork.name = fileName(pths[0]).replace(/\.pth$/i, "").replace(/[_-]+/g, " ");
+    const path = await window.acs.pickVoiceModel();
+    if (!path) return;
+    importWork.pthPath = path;
+    importWork.indexPath = "";
+    importWork.name = fileName(path).replace(/\.pth$/i, "").replace(/[_-]+/g, " ");
     nameInput.value = importWork.name;
+    updateImportPage(layout);
+  };
+  $("#choose-index", layout).onclick = async () => {
+    const path = await window.acs.pickVoiceIndex();
+    if (!path) return;
+    importWork.indexPath = path;
     updateImportPage(layout);
   };
   $("#import-cancel", layout).onclick = () => { resetImportWork(); go("voices"); };
@@ -1080,6 +1081,10 @@ function updateImportPage(root) {
   submit.disabled = !ready;
   submit.innerHTML = importWork.busy ? `${icon("refresh", "spin")} Importing…` : `${icon("upload")} Import voice`;
   $("#choose-model", root).classList.toggle("has-file", !!importWork.pthPath);
+  const indexButton = $("#choose-index", root);
+  indexButton.innerHTML = importWork.indexPath
+    ? `${icon("refresh")} <span>Replace .index file</span>`
+    : `${icon("plus")} <span>Add optional .index file</span>`;
   $("#import-error", root).textContent = "";
 }
 
@@ -1090,7 +1095,12 @@ async function submitVoiceImport(root) {
     const res = await fetch(`${API}/api/models/import-bundle`, { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pth_path: importWork.pthPath, index_path: importWork.indexPath, name: importWork.name.trim() }) });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || "Import failed");
+    if (!res.ok) {
+      const detail = res.status === 404
+        ? "The import service is not loaded yet. Quit and reopen Vocalis, then try again."
+        : (data.detail || "Import failed");
+      throw new Error(detail);
+    }
     await loadModels();
     const importedName = data.name;
     resetImportWork();
