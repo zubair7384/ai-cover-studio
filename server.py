@@ -124,6 +124,113 @@ def import_models(payload: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Model library management (additive; the ML engine is untouched)
+#
+# These are thin file-management helpers over engine.MODELS_DIR / OUTPUT_DIR.
+# They never touch model weights or training logic — only list, rename, delete,
+# and serve files the user already owns on their own machine.
+# ---------------------------------------------------------------------------
+def _index_files_for(stem: str) -> list[Path]:
+    """.index files that clearly belong to a model named `stem`."""
+    return [p for p in engine.MODELS_DIR.glob("*.index") if p.stem.startswith(stem)]
+
+
+@app.get("/api/models/meta")
+def models_meta() -> dict:
+    """List installed models with on-disk metadata (size, modified time)."""
+    out = []
+    for name in engine.list_voice_models():
+        pth = engine.MODELS_DIR / f"{name}.pth"
+        try:
+            st = pth.stat()
+        except OSError:
+            continue
+        idx = _index_files_for(name)
+        idx_size = sum(p.stat().st_size for p in idx if p.exists())
+        out.append({
+            "name": name,
+            "size": st.st_size + idx_size,
+            "modified": st.st_mtime,
+            "has_index": bool(idx),
+        })
+    return {"models": out}
+
+
+@app.post("/api/models/rename")
+def rename_model(payload: dict) -> dict:
+    """Rename a model's .pth (and any paired .index files) in place."""
+    old = Path(str(payload.get("old", ""))).stem
+    new = engine.safe_model_name(str(payload.get("new", "")))
+    if not old or not new:
+        raise HTTPException(status_code=400, detail="Both old and new names are required.")
+    src = engine.MODELS_DIR / f"{old}.pth"
+    if not src.exists():
+        raise HTTPException(status_code=404, detail=f"Model '{old}' not found.")
+    dst = engine.MODELS_DIR / f"{new}.pth"
+    if dst.exists():
+        raise HTTPException(status_code=409, detail=f"A model named '{new}' already exists.")
+    src.rename(dst)
+    for idx in _index_files_for(old):
+        idx.rename(engine.MODELS_DIR / (new + idx.name[len(old):]))
+    return {"name": new, "models": engine.list_voice_models()}
+
+
+@app.post("/api/models/delete")
+def delete_model(payload: dict) -> dict:
+    """Delete a model's .pth and any paired .index files."""
+    name = Path(str(payload.get("name", ""))).stem
+    pth = engine.MODELS_DIR / f"{name}.pth"
+    if not name or not pth.exists():
+        raise HTTPException(status_code=404, detail=f"Model '{name}' not found.")
+    pth.unlink()
+    for idx in _index_files_for(name):
+        try:
+            idx.unlink()
+        except OSError:
+            pass
+    return {"deleted": name, "models": engine.list_voice_models()}
+
+
+@app.get("/api/models/file/{name}")
+def model_file(name: str) -> FileResponse:
+    """Serve a model's .pth so the renderer can export it via the save dialog."""
+    safe = Path(name).stem
+    pth = engine.MODELS_DIR / f"{safe}.pth"
+    if not pth.exists():
+        raise HTTPException(status_code=404, detail="Model not found.")
+    return FileResponse(str(pth), media_type="application/octet-stream",
+                        filename=f"{safe}.pth")
+
+
+# ---------------------------------------------------------------------------
+# Generated-cover library (additive)
+# ---------------------------------------------------------------------------
+@app.get("/api/outputs")
+def list_outputs() -> dict:
+    """List finished covers (final_cover_*.mp3) with size + modified time."""
+    items = []
+    for p in engine.OUTPUT_DIR.glob("final_cover_*.mp3"):
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+        items.append({"name": p.name, "size": st.st_size, "modified": st.st_mtime})
+    items.sort(key=lambda x: x["modified"], reverse=True)
+    return {"covers": items}
+
+
+@app.post("/api/outputs/delete")
+def delete_output(payload: dict) -> dict:
+    """Delete a single finished cover by filename."""
+    safe = Path(str(payload.get("name", ""))).name
+    path = engine.OUTPUT_DIR / safe
+    if not safe.startswith("final_cover_") or not path.exists():
+        raise HTTPException(status_code=404, detail="Output not found.")
+    path.unlink()
+    return {"deleted": safe}
+
+
+# ---------------------------------------------------------------------------
 # Upload helper — save an UploadFile to a temp path the engine can read
 # ---------------------------------------------------------------------------
 def _save_upload(upload: UploadFile, prefix: str) -> str:

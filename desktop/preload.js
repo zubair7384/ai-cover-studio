@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld("acs", {
   pickModelFiles: () => ipcRenderer.invoke("acs:pickModelFiles"),
   pickFolder: () => ipcRenderer.invoke("acs:pickFolder"),
   saveCover: (name) => ipcRenderer.invoke("acs:saveCover", name),
+  savePath: (opts) => ipcRenderer.invoke("acs:savePath", opts),
   downloadTo: (url, dest) => ipcRenderer.invoke("acs:downloadTo", url, dest),
   revealPath: (p) => ipcRenderer.invoke("acs:revealPath", p),
 });

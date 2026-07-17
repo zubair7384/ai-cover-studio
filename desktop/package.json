@@ -1,9 +1,9 @@
 {
-  "name": "ai-cover-studio",
-  "productName": "AI Cover Studio",
+  "name": "vocalis",
+  "productName": "Vocalis",
   "version": "1.0.0",
-  "description": "Fully local AI song-cover generator — train a voice and swap vocals on your own machine.",
-  "author": "AI Cover Studio",
+  "description": "Any song. Your voice. Fully local. — train a voice and swap vocals on your own machine.",
+  "author": "Vocalis",
   "license": "MIT",
   "main": "main.js",
   "scripts": {
@@ -19,7 +19,7 @@
   },
   "build": {
     "appId": "ai.coverstudio.desktop",
-    "productName": "AI Cover Studio",
+    "productName": "Vocalis",
     "directories": {
       "output": "../dist_installers",
       "buildResources": "build"

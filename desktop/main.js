@@ -180,16 +180,22 @@ function stopSidecar() {
 // ---------------------------------------------------------------------------
 function createSplash() {
   splash = new BrowserWindow({
-    width: 420, height: 260, frame: false, resizable: false,
-    center: true, backgroundColor: "#0B0F19", show: true,
+    width: 440, height: 280, frame: false, resizable: false,
+    center: true, backgroundColor: "#141417", show: true,
   });
   splash.loadFile(path.join(__dirname, "renderer", "splash.html"));
 }
 
 function createMainWindow() {
+  const isMac = process.platform === "darwin";
   mainWindow = new BrowserWindow({
-    width: 1200, height: 820, minWidth: 940, minHeight: 680,
-    backgroundColor: "#0B0F19", show: false, title: "AI Cover Studio",
+    width: 1200, height: 820, minWidth: 780, minHeight: 640,
+    backgroundColor: "#141417", show: false, title: "Vocalis",
+    // Hidden title bar for a first-party feel; traffic lights stay inset on mac.
+    titleBarStyle: isMac ? "hiddenInset" : "hidden",
+    trafficLightPosition: isMac ? { x: 16, y: 20 } : undefined,
+    titleBarOverlay: isMac ? undefined : { color: "#00000000", symbolColor: "#8a8a90", height: 44 },
+    ...(isMac ? { vibrancy: "under-window", visualEffectState: "active" } : {}),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -236,6 +242,19 @@ ipcMain.handle("acs:saveCover", async (_evt, name) => {
   const res = await dialog.showSaveDialog(mainWindow, {
     title: "Save cover", defaultPath: name || "cover.mp3",
     filters: [{ name: "MP3 audio", extensions: ["mp3"] }],
+  });
+  return res.canceled ? "" : res.filePath;
+});
+
+// Generic save dialog — used to export a voice model (.pth) or other files.
+ipcMain.handle("acs:savePath", async (_evt, opts) => {
+  const { title, defaultName, extensions } = opts || {};
+  const res = await dialog.showSaveDialog(mainWindow, {
+    title: title || "Export",
+    defaultPath: defaultName || "file",
+    filters: extensions && extensions.length
+      ? [{ name: "File", extensions }]
+      : undefined,
   });
   return res.canceled ? "" : res.filePath;
 });
