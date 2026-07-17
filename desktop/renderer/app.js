@@ -111,6 +111,7 @@ const state = {
 // working state for the two flows (persist across navigation)
 const swapWork = { model: "", songFile: null, songUrl: "", songDur: 0, pitch: 0, index: 0.75, gain: 0 };
 const trainWork = { name: "", files: [], datasetDir: "", sampleRate: "40000", epochs: 300 };
+const importWork = { pthPath: "", indexPath: "", name: "", busy: false };
 
 // ---------------------------------------------------------------------------
 // Crypto — local password hashing (PBKDF2)
@@ -441,6 +442,7 @@ const NAV = [
   { id: "swap", label: "Vocal Swapper", icon: "swap" },
   { id: "train", label: "Voice Cloning", icon: "clone" },
   { id: "voices", label: "My Voices", icon: "voices" },
+  { id: "import", label: "Import Voice", icon: "upload" },
   { id: "library", label: "Library", icon: "library" },
   { id: "settings", label: "Settings", icon: "settings" },
 ];
@@ -712,7 +714,7 @@ screens.swap = () => {
     <label class="field-label">Voice model</label>
     <div class="row"><div class="grow" id="model-picker"></div>
       <button class="icon-btn" id="refresh-models" title="Rescan voice models">${icon("refresh")}</button></div>
-    <div class="row mt-8"><button class="btn small" id="import-model">${icon("upload")} Import .pth / .index…</button></div>
+    <div class="row mt-8"><button class="btn small" id="import-model">${icon("upload")} Import Voice…</button></div>
     <p class="card-hint" id="model-hint"></p>
   </div>`);
   left.appendChild(modelCard);
@@ -774,7 +776,7 @@ screens.swap = () => {
       await loadModels(); renderModelPicker($("#model-picker", modelCard)); renderModelHint();
       toast({ kind: "info", title: "Voice models refreshed", msg: `${state.models.length} available.` });
     };
-    $("#import-model", modelCard).onclick = importModels;
+    $("#import-model", modelCard).onclick = () => go("import");
     renderModelHint();
 
     setupSongDrop($("#song-drop", songCard), $("#song-input", songCard), $("#song-loaded", songCard));
@@ -1006,6 +1008,102 @@ async function importModels() {
   toast({ kind: "ok", title: "Model files imported",
     msg: `${data.copied.length} copied${data.skipped.length ? `, ${data.skipped.length} skipped` : ""}.` });
 }
+
+function fileName(path) {
+  return String(path || "").split(/[\\/]/).pop() || "";
+}
+
+// ============================================================================
+// SCREEN: Import Voice
+// ============================================================================
+screens.import = () => {
+  const wrap = h(`<div class="import-page"></div>`);
+  const head = pageHead("Import Voice", "Add a trained RVC voice model from your computer.");
+  const back = h(`<button class="btn small">${icon("chevron")} My Voices</button>`);
+  back.onclick = () => go("voices");
+  head.querySelector(".page-head").appendChild(back);
+  head.querySelector(".page-head").style.cssText = "display:flex;justify-content:space-between;align-items:flex-end;gap:16px";
+  wrap.appendChild(head);
+
+  const layout = h(`<div class="import-layout">
+    <section class="card glass import-card">
+      <div class="import-step"><span>1</span><div><h3>Choose model files</h3><p>Select one trained <b>.pth</b> model. Add its <b>.index</b> file when available for better voice matching.</p></div></div>
+      <button class="import-drop" id="choose-model" type="button">
+        <span class="drop-icon">${icon("upload")}</span>
+        <span><b>Choose model files</b><small>.pth required · .index optional</small></span>
+      </button>
+      <div class="selected-files" id="selected-files"></div>
+      <div class="import-step details-step"><span>2</span><div><h3>Voice details</h3><p>This is how the voice will appear throughout Vocalis.</p></div></div>
+      <label class="field-label" for="import-name">Voice name</label>
+      <input class="input" id="import-name" placeholder="e.g. Studio Vocal" maxlength="80" />
+      <div class="auth-err" id="import-error" role="alert"></div>
+      <div class="import-actions"><button class="btn ghost" id="import-cancel">Cancel</button><button class="btn-primary" id="import-submit">${icon("upload")} Import voice</button></div>
+    </section>
+    <aside class="card glass import-help">
+      <div class="help-icon">${icon("info")}</div><h3>Before you import</h3>
+      <ul><li>Use an RVC-compatible <b>.pth</b> file.</li><li>The <b>.index</b> file is optional but recommended.</li><li>Only import voices you own or have permission to use.</li><li>Your files stay on this device.</li></ul>
+    </aside>
+  </div>`);
+  wrap.appendChild(layout);
+
+  const nameInput = $("#import-name", layout);
+  nameInput.value = importWork.name;
+  nameInput.oninput = () => { importWork.name = nameInput.value; updateImportPage(layout); };
+  $("#choose-model", layout).onclick = async () => {
+    const paths = await window.acs.pickModelFiles();
+    if (!paths.length) return;
+    const pths = paths.filter((p) => p.toLowerCase().endsWith(".pth"));
+    const indexes = paths.filter((p) => p.toLowerCase().endsWith(".index"));
+    if (pths.length !== 1 || indexes.length > 1) {
+      $("#import-error", layout).textContent = "Select exactly one .pth file and no more than one .index file.";
+      return;
+    }
+    importWork.pthPath = pths[0];
+    importWork.indexPath = indexes[0] || "";
+    if (!importWork.name) importWork.name = fileName(pths[0]).replace(/\.pth$/i, "").replace(/[_-]+/g, " ");
+    nameInput.value = importWork.name;
+    updateImportPage(layout);
+  };
+  $("#import-cancel", layout).onclick = () => { resetImportWork(); go("voices"); };
+  $("#import-submit", layout).onclick = () => submitVoiceImport(layout);
+  updateImportPage(layout);
+  return wrap;
+};
+
+function updateImportPage(root) {
+  const files = $("#selected-files", root);
+  files.innerHTML = importWork.pthPath ? `
+    <div class="selected-file"><span class="file-kind">PTH</span><div><b>${escapeHtml(fileName(importWork.pthPath))}</b><small>Voice model</small></div>${icon("checkCircle")}</div>
+    ${importWork.indexPath ? `<div class="selected-file"><span class="file-kind index">IDX</span><div><b>${escapeHtml(fileName(importWork.indexPath))}</b><small>Feature index</small></div>${icon("checkCircle")}</div>` : `<div class="index-note">${icon("info")} No index selected — the voice can still be used.</div>`}` : "";
+  const ready = importWork.pthPath && importWork.name.trim() && !importWork.busy;
+  const submit = $("#import-submit", root);
+  submit.disabled = !ready;
+  submit.innerHTML = importWork.busy ? `${icon("refresh", "spin")} Importing…` : `${icon("upload")} Import voice`;
+  $("#choose-model", root).classList.toggle("has-file", !!importWork.pthPath);
+  $("#import-error", root).textContent = "";
+}
+
+async function submitVoiceImport(root) {
+  if (!importWork.pthPath || !importWork.name.trim() || importWork.busy) return;
+  importWork.busy = true; updateImportPage(root);
+  try {
+    const res = await fetch(`${API}/api/models/import-bundle`, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pth_path: importWork.pthPath, index_path: importWork.indexPath, name: importWork.name.trim() }) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Import failed");
+    await loadModels();
+    const importedName = data.name;
+    resetImportWork();
+    toast({ kind: "ok", title: `“${importedName}” imported`, msg: "The voice is ready to use.",
+      action: { label: "Use in Vocal Swapper", fn: () => { swapWork.model = importedName; go("swap"); } } });
+    go("voices");
+  } catch (err) {
+    importWork.busy = false; updateImportPage(root);
+    $("#import-error", root).textContent = String(err.message || err);
+  }
+}
+
+function resetImportWork() { Object.assign(importWork, { pthPath: "", indexPath: "", name: "", busy: false }); }
 
 // ============================================================================
 // SCREEN: Voice Cloning (training)
@@ -1260,15 +1358,17 @@ function appendLog(kind, line) {
 screens.voices = () => {
   const wrap = h(`<div></div>`);
   const head = pageHead("My Voices", "Your trained and imported voice models.");
-  const refresh = h(`<button class="btn small">${icon("refresh")} Refresh</button>`);
+  const headActions = h(`<div class="row"><button class="btn small" id="voices-refresh">${icon("refresh")} Refresh</button><button class="btn-primary compact" id="voices-import">${icon("plus")} Import Voice</button></div>`);
+  const refresh = $("#voices-refresh", headActions);
   refresh.onclick = async () => { await loadModels(); go("voices"); };
-  head.querySelector(".page-head").appendChild(refresh);
+  $("#voices-import", headActions).onclick = () => go("import");
+  head.querySelector(".page-head").appendChild(headActions);
   head.querySelector(".page-head").style.cssText = "display:flex;justify-content:space-between;align-items:flex-end;gap:16px";
   wrap.appendChild(head);
 
   if (!state.models.length) {
     wrap.appendChild(emptyState("voices", "No voice models yet",
-      "Train a voice in Voice Cloning, or import a .pth in Vocal Swapper.", "Train a Voice", () => go("train")));
+      "Train a new voice or import a compatible RVC model from your computer.", "Import a Voice", () => go("import")));
     return wrap;
   }
   const grid = h(`<div class="voice-grid"></div>`);

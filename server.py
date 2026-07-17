@@ -123,6 +123,21 @@ def import_models(payload: dict) -> dict:
     return engine.import_model_files(paths)
 
 
+@app.post("/api/models/import-bundle")
+def import_voice_bundle(payload: dict) -> dict:
+    """Import one user-selected RVC voice and its optional search index."""
+    try:
+        return engine.import_voice_bundle(
+            str(payload.get("pth_path", "")),
+            str(payload.get("index_path", "")),
+            str(payload.get("name", "")),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileExistsError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 # ---------------------------------------------------------------------------
 # Model library management (additive; the ML engine is untouched)
 #

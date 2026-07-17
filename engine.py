@@ -199,6 +199,39 @@ def import_model_files(paths: list[str]) -> dict:
     return {"copied": copied, "skipped": skipped, "models": list_voice_models()}
 
 
+def import_voice_bundle(pth_path: str, index_path: str = "", name: str = "") -> dict:
+    """Install one RVC model and its optional index under a predictable name."""
+    pth = Path(pth_path)
+    if not pth.is_file() or pth.suffix.lower() != ".pth":
+        raise ValueError("Choose a valid RVC .pth model file.")
+
+    safe_name = safe_model_name(name or pth.stem)
+    if not safe_name:
+        raise ValueError("Enter a valid voice name.")
+
+    index = Path(index_path) if index_path else None
+    if index and (not index.is_file() or index.suffix.lower() != ".index"):
+        raise ValueError("Choose a valid .index file, or remove it.")
+
+    pth_dest = MODELS_DIR / f"{safe_name}.pth"
+    index_dest = MODELS_DIR / f"{safe_name}.index"
+    if pth_dest.exists() or (index and index_dest.exists()):
+        raise FileExistsError(f"A voice named '{safe_name}' already exists.")
+
+    shutil.copyfile(pth, pth_dest)
+    try:
+        if index:
+            shutil.copyfile(index, index_dest)
+    except Exception:
+        pth_dest.unlink(missing_ok=True)
+        raise
+
+    copied = [pth_dest.name] + ([index_dest.name] if index else [])
+    log.info("Imported voice '%s' (%d file(s)).", safe_name, len(copied))
+    return {"name": safe_name, "copied": copied, "has_index": bool(index),
+            "models": list_voice_models()}
+
+
 # ---------------------------------------------------------------------------
 # Step 1 — stem separation (HTDemucs via audio-separator)
 # ---------------------------------------------------------------------------
