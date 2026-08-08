@@ -1,0 +1,177 @@
+/* ============================================================================
+   Meter — the signature component family. §6.
+
+   One visual language covers waveform, level, training progress, pipeline
+   stages and storage usage: segmented amber bars on graphite with SF Mono
+   tabular readouts.
+
+   §7: meters animate width LINEARLY — never eased, or progress reads as
+   inaccurate. The amber pulse on a running pipeline stage is the ONLY looping
+   animation in the app.
+   ========================================================================== */
+
+.meter { display: flex; align-items: center; gap: var(--sp-2); width: 100%; }
+.meter__readout { color: var(--text-secondary); flex: none; }
+
+/* ---- MeterBar ----------------------------------------------------------- */
+
+.meter-bar {
+  position: relative;
+  flex: 1;
+  height: 4px;
+  min-width: 40px;
+  border-radius: 2px;
+  background: var(--meter-track);
+  overflow: hidden;
+}
+.meter-bar__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  border-radius: 2px;
+  background: var(--meter-fill);
+  transition: width var(--dur-panel) var(--ease-meter);   /* linear */
+}
+.meter-bar--ok    .meter-bar__fill { background: var(--ok-graphic); }
+.meter-bar--error .meter-bar__fill { background: var(--err-graphic); }
+
+/* Indeterminate — a travelling segment, not a pulse. */
+.meter-bar--indeterminate .meter-bar__fill {
+  width: 32%;
+  transition: none;
+  animation: meter-slide 1.15s var(--ease-enter) infinite;
+}
+@keyframes meter-slide {
+  0%   { transform: translateX(-110%); }
+  100% { transform: translateX(420%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .meter-bar--indeterminate .meter-bar__fill {
+    animation: none;
+    width: 100%;
+    opacity: 0.45;
+  }
+}
+
+/* ---- MeterBar, circular (sidebar Activity rows) ------------------------- */
+
+.meter-ring { flex: none; display: block; }
+.meter-ring__track { stroke: var(--meter-track); }
+.meter-ring__fill {
+  stroke: var(--meter-fill);
+  transition: stroke-dashoffset var(--dur-panel) var(--ease-meter);
+}
+
+/* ---- MeterSegments ------------------------------------------------------ */
+/* 3px-wide bars, 2px gaps, filled left-to-right. */
+
+.meter-seg {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  flex: 1;
+  height: 14px;
+  min-width: 40px;
+}
+.meter-seg__bar {
+  width: 3px;
+  flex: none;
+  height: 100%;
+  border-radius: 1px;
+  background: var(--meter-track);
+  transition: background-color var(--dur-press) var(--ease-meter);
+}
+.meter-seg__bar--on { background: var(--meter-fill); }
+/* Below the healthy range (Prompt 5: too little training material). */
+.meter-seg__bar--under { background: var(--gr-500); }
+/* The target band marked on the track. */
+.meter-seg__bar--band { box-shadow: inset 0 -1px 0 0 var(--accent-text); }
+
+/* ---- Waveform ----------------------------------------------------------- */
+
+.waveform {
+  position: relative;
+  flex: 1;
+  min-width: 80px;
+  cursor: pointer;
+  touch-action: none;
+}
+.waveform canvas { display: block; width: 100%; height: 100%; }
+.waveform:focus-visible { box-shadow: var(--focus-ring); border-radius: var(--r-chip); }
+
+/* ---- Pipeline ----------------------------------------------------------- */
+
+.pipeline { display: flex; align-items: flex-start; width: 100%; }
+
+.pipeline__stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-1);
+  flex: none;
+  min-width: 96px;
+  text-align: center;
+}
+.pipeline__label { color: var(--text-secondary); }
+.pipeline__stage--running .pipeline__label { color: var(--text-primary); }
+.pipeline__duration { color: var(--text-secondary); }
+
+/* State dot — pending hollow / running amber pulsing / done green / failed red */
+.pipeline__dot {
+  width: 14px; height: 14px;
+  border-radius: 999px;
+  border: 1.5px solid var(--gr-600);
+  background: transparent;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--on-accent);
+  flex: none;
+}
+.pipeline__stage--running .pipeline__dot {
+  border-color: var(--accent);
+  background: var(--accent);
+  animation: pipeline-pulse 1.4s ease-in-out infinite;
+}
+.pipeline__stage--done .pipeline__dot {
+  border-color: var(--ok-graphic);
+  background: var(--ok-graphic);
+}
+.pipeline__stage--failed .pipeline__dot {
+  border-color: var(--err-graphic);
+  background: var(--err-graphic);
+}
+
+/* The only looping animation in the app (§7). */
+@keyframes pipeline-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--accent-glow); }
+  50%      { box-shadow: 0 0 0 5px var(--accent-glow-0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pipeline__stage--running .pipeline__dot { animation: none; }
+}
+
+/* Connector — a hairline that fills amber as the run advances. */
+.pipeline__connector {
+  flex: 1;
+  height: 1px;
+  margin-top: 6.5px;   /* centres on the 14px dot */
+  min-width: var(--sp-4);
+  background: var(--hairline);
+  position: relative;
+  overflow: hidden;
+}
+.pipeline__connector::after {
+  content: "";
+  position: absolute; inset: 0 auto 0 0;
+  width: var(--fill, 0%);
+  background: var(--accent);
+  transition: width var(--dur-panel) var(--ease-meter);
+}
+
+/* ---- Sparkline (Prompt 5 loss curve) ------------------------------------ */
+
+.sparkline {
+  display: block;
+  background: var(--bg-well);
+  border-radius: var(--r-chip);
+}
+.sparkline__line { stroke: var(--accent); fill: none; stroke-width: 1.5; }

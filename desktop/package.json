@@ -1,8 +1,8 @@
 {
   "name": "vocalis",
   "productName": "Vocalis",
-  "version": "1.0.0",
-  "description": "Any song. Your voice. Fully local. — train a voice and swap vocals on your own machine.",
+  "version": "3.0.0",
+  "description": "Sing anything in a voice you own. Fully local \u2014 train a voice and swap vocals on your own machine.",
   "author": "Vocalis",
   "license": "MIT",
   "main": "main.js",
@@ -11,7 +11,9 @@
     "dev": "ACS_DEV=1 electron .",
     "dist": "electron-builder",
     "dist:mac": "electron-builder --mac",
-    "dist:win": "electron-builder --win"
+    "dist:win": "electron-builder --win",
+    "check:contrast": "node scripts/check-contrast.mjs",
+    "check": "node scripts/check-contrast.mjs"
   },
   "devDependencies": {
     "electron": "^33.0.0",
@@ -27,23 +29,62 @@
     "files": [
       "main.js",
       "preload.js",
-      "renderer/**/*"
+      "renderer/**/*",
+      "!renderer/dev/**",
+      "!renderer/styleguide/**",
+      "!renderer/app.js",
+      "!renderer/styles.css"
     ],
     "extraResources": [
-      { "from": "../engine.py", "to": "backend/engine.py" },
-      { "from": "../server.py", "to": "backend/server.py" },
-      { "from": "runtime", "to": "backend/runtime" },
-      { "from": "../Applio", "to": "backend/Applio", "filter": ["!**/.venv/**", "!**/logs/**", "!**/.git/**"] },
-      { "from": "../.separator_models", "to": "data_seed/.separator_models" }
+      {
+        "from": "../engine.py",
+        "to": "backend/engine.py"
+      },
+      {
+        "from": "../server.py",
+        "to": "backend/server.py"
+      },
+      {
+        "from": "runtime",
+        "to": "backend/runtime"
+      },
+      {
+        "from": "../Applio",
+        "to": "backend/Applio",
+        "filter": [
+          "!**/.venv/**",
+          "!**/logs/**",
+          "!**/.git/**"
+        ]
+      },
+      {
+        "from": "../.separator_models",
+        "to": "data_seed/.separator_models"
+      }
     ],
     "mac": {
       "category": "public.app-category.music",
-      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }],
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
       "hardenedRuntime": true,
       "gatekeeperAssess": false
     },
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }]
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
     },
     "nsis": {
       "oneClick": false,

@@ -1,0 +1,111 @@
+/* ============================================================================
+   /styleguide — review surface only. Not part of the shipped app chrome.
+   ========================================================================== */
+
+.sg { height: 100vh; display: flex; flex-direction: column; background: var(--bg-content); }
+
+.sg__head {
+  height: var(--toolbar-h);
+  flex: none;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--pad-window);
+  padding-left: 84px;              /* clear of the traffic lights */
+  border-bottom: 1px solid var(--hairline);
+}
+.sg__head .t-caption { color: var(--text-tertiary); }
+
+.sg__panels { flex: 1; display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
+
+.sg__panel {
+  overflow-y: auto;
+  padding: var(--pad-window);
+  background: var(--bg-content);
+  color: var(--text-primary);
+}
+.sg__panel + .sg__panel { border-left: 1px solid var(--hairline); }
+
+.sg__panel-head {
+  position: sticky;
+  top: calc(var(--pad-window) * -1);
+  margin: calc(var(--pad-window) * -1) calc(var(--pad-window) * -1) var(--sp-4);
+  padding: var(--sp-2) var(--pad-window);
+  background: var(--bg-content);
+  border-bottom: 1px solid var(--hairline);
+  z-index: 2;
+}
+
+.sg__gallery { display: flex; flex-direction: column; gap: var(--sp-7); }
+
+.sg__group { display: flex; flex-direction: column; gap: var(--sp-3); }
+.sg__group-title { color: var(--text-primary); }
+.sg__group-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--pad-card);
+  background: var(--bg-raised);
+  border: var(--border-1);
+  border-radius: var(--r-card);
+}
+
+.sg__row { display: flex; gap: var(--sp-4); align-items: flex-start; }
+.sg__row-label { flex: none; width: 96px; padding-top: 6px; color: var(--text-tertiary); }
+.sg__row-items {
+  flex: 1; min-width: 0;
+  display: flex; flex-wrap: wrap; gap: var(--sp-3);
+  align-items: center;
+}
+.sg__stack { display: flex; flex-direction: column; gap: var(--sp-3); width: 100%; min-width: 0; }
+.sg__row-items > .sg__stack { flex: 1; }
+
+/* Swatches ---------------------------------------------------------------- */
+
+.sg__swatch { display: flex; flex-direction: column; gap: var(--sp-1); align-items: center; }
+.sg__swatch-chip {
+  width: 40px; height: 28px;
+  border-radius: var(--r-chip);
+  border: 1px solid var(--hairline);
+}
+.sg__swatch-name { color: var(--text-tertiary); }
+
+.sg__icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: var(--ctl-md); height: var(--ctl-md);
+  border-radius: var(--r-control);
+  background: var(--bg-control);
+  color: var(--text-secondary);
+}
+
+.sg__ctx {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; height: 56px;
+  border: 1px dashed var(--gr-600);
+  border-radius: var(--r-card);
+  color: var(--text-tertiary);
+}
+
+/* Contrast table ---------------------------------------------------------- */
+
+.sg__table { width: 100%; font-size: var(--t-caption-size); }
+.sg__table th {
+  text-align: left;
+  font-weight: var(--t-label-weight);
+  color: var(--text-tertiary);
+  padding: var(--sp-1) var(--sp-2);
+  border-bottom: 1px solid var(--hairline);
+}
+.sg__table td {
+  padding: var(--sp-1) var(--sp-2);
+  border-bottom: 1px solid var(--hairline);
+  color: var(--text-secondary);
+}
+.sg__table tr:last-child td { border-bottom: 0; }
+.sg__summary { padding: var(--sp-2) 0; color: var(--ok-text); font-weight: var(--t-body-em-weight); }
+.sg__fail, .sg__fail td { color: var(--err-text); }
+
+/* Narrow windows: stack the two themes instead of clipping them. */
+@media (max-width: 1000px) {
+  .sg__panels { grid-template-columns: 1fr; }
+  .sg__panel + .sg__panel { border-left: 0; border-top: 1px solid var(--hairline); }
+}

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Settings</title>
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; img-src 'self' data: blob:; connect-src 'self' http://127.0.0.1:*; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+  <link rel="stylesheet" href="/styles/tokens.css" />
+  <link rel="stylesheet" href="/styles/base.css" />
+  <link rel="stylesheet" href="/components/primitives/primitives.css" />
+  <style>
+    /* Settings gets its real four-tab layout in Prompt 6. This window exists
+       now so ⌘, and the sidebar gear are not dead ends. */
+    body { background: var(--bg-content); }
+    .settings {
+      height: 100vh;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: var(--sp-3);
+      padding: var(--pad-window);
+      text-align: center;
+    }
+    .settings__title { color: var(--text-primary); }
+    .settings__body { color: var(--text-secondary); max-width: 46ch; }
+  </style>
+</head>
+<body>
+  <div class="settings">
+    <div class="settings__title t-title-2">Settings</div>
+    <p class="settings__body t-body">
+      General, Audio, Storage and About land in a later pass. Closing this window
+      returns you to Vocalis.
+    </p>
+  </div>
+</body>
+</html>

@@ -15,9 +15,94 @@ let API = "";
 const BRAND = { name: "Vocalis", tagline: "Any song. Your voice. Fully local.", version: "v2" };
 
 // ---------------------------------------------------------------------------
+// Motion — Framer Motion's vanilla build, vendored at renderer/vendor/motion.js
+// and exposed as window.Motion. Every helper here degrades to "just land on the
+// final frame" when the bundle is missing or the user prefers reduced motion.
+// ---------------------------------------------------------------------------
+const M = window.Motion || {};
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const SPRING = { type: "spring", stiffness: 420, damping: 34, mass: 0.9 };
+const SPRING_SOFT = { type: "spring", stiffness: 240, damping: 26 };
+const EASE_OUT = [0.16, 1, 0.3, 1];
+
+function anim(target, keyframes, options = {}) {
+  if (!target || !M.animate) return null;
+  if (reduceMotion) {
+    const last = {};
+    for (const [k, v] of Object.entries(keyframes)) last[k] = Array.isArray(v) ? v[v.length - 1] : v;
+    return M.animate(target, last, { duration: 0 });
+  }
+  return M.animate(target, keyframes, options);
+}
+
+// Staggered rise for the cards of a screen that just mounted. Inline styles are
+// cleared afterwards so CSS hover/active transforms keep working.
+function enterScreen(node) {
+  const kids = [...node.children].filter((n) => n.nodeType === 1);
+  if (!kids.length || !M.animate) return;
+  const a = anim(kids, { opacity: [0, 1], y: [12, 0] }, {
+    duration: 0.44, ease: EASE_OUT,
+    delay: M.stagger ? M.stagger(0.035) : 0,
+  });
+  a?.finished?.then(() => kids.forEach((k) => { k.style.transform = ""; k.style.opacity = ""; }))
+    .catch(() => {});
+}
+
+// One delegated listener gives every control the same tactile spring-back,
+// including controls rendered long after boot.
+const PRESS_SEL = ".btn, .btn-primary, .icon-btn, .quick-card, .nav-item, .play-btn," +
+  " .seg button, .ab-toggle button, .dropzone, .import-drop, .menu button, .user-chip, .index-picker";
+document.addEventListener("pointerdown", (e) => {
+  const el = e.target.closest?.(PRESS_SEL);
+  if (!el || el.disabled) return;
+  anim(el, { scale: 0.975 }, { duration: 0.09, ease: "easeOut" });
+  const release = () => {
+    anim(el, { scale: 1 }, SPRING);
+    window.removeEventListener("pointerup", release);
+    window.removeEventListener("pointercancel", release);
+  };
+  window.addEventListener("pointerup", release);
+  window.addEventListener("pointercancel", release);
+});
+
+// ---------------------------------------------------------------------------
+// The light field — signature. Three lamps sit behind every glass surface and
+// brighten with whatever is playing, so the room the app lives in is lit by the
+// sound it is making. Fed from the waveform peaks we already decoded, so there
+// is no extra audio graph to go wrong.
+// ---------------------------------------------------------------------------
+const METER_SHAPE = [0.58, 0.82, 0.46, 1, 0.7, 0.52, 0.9, 0.44];
+const ambient = {
+  level: 0, target: 0, raf: 0,
+  pulse(v) {
+    this.target = Math.max(this.target, Math.min(1, Math.max(0, v || 0)));
+    if (!this.raf && !reduceMotion) this.raf = requestAnimationFrame(() => this.tick());
+  },
+  tick() {
+    this.raf = 0;
+    this.level += (this.target - this.level) * 0.18;
+    this.target *= 0.9;                       // decays whenever nothing feeds it
+    const done = this.level < 0.004;
+    if (done) this.level = 0;
+    document.documentElement.style.setProperty("--energy", this.level.toFixed(3));
+    paintMeters(done ? 0 : this.level);
+    if (!done) this.raf = requestAnimationFrame(() => this.tick());
+  },
+};
+function paintMeters(energy) {
+  const bars = $$(".hero-meter i, .glyph i");
+  for (let i = 0; i < bars.length; i++) {
+    if (!energy) { bars[i].style.transform = ""; continue; }
+    const w = METER_SHAPE[i % METER_SHAPE.length];
+    bars[i].style.transform = `scaleY(${(0.34 + energy * w * 0.66).toFixed(3)})`;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Icons (Lucide-style, 1.5px stroke via CSS)
 // ---------------------------------------------------------------------------
 const P = {
+  home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.6V19a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9.6"/><path d="M9.5 21v-6h5v6"/>',
   dashboard: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/>',
   swap: '<path d="M2 10v4M6 6v12M10 4v16M14 7v10M18 5v14M22 10v4"/>',
   clone: '<path d="M22 10 12 5 2 10l10 5 10-5Z"/><path d="M6 12v5c0 1 2 2 6 2s6-1 6-2v-5"/>',
@@ -52,6 +137,7 @@ const P = {
   cpu: '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/>',
   panelLeft: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>',
   chevron: '<path d="m9 18 6-6-6-6"/>',
+  chevronLeft: '<path d="m15 18-6-6 6-6"/>',
   disc: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/>',
 };
 function icon(name, cls = "") {
@@ -152,7 +238,7 @@ async function loadCovers() {
 // Toasts
 // ---------------------------------------------------------------------------
 function toast({ kind = "info", title, msg = "", action } = {}) {
-  const el = h(`<div class="toast ${kind}">
+  const el = h(`<div class="toast glass-float ${kind}">
     <span class="t-icon">${icon(kind === "ok" ? "checkCircle" : kind === "err" ? "alert" : "info")}</span>
     <div class="t-body"><div class="t-title"></div>${msg ? `<div class="t-msg"></div>` : ""}</div>
   </div>`);
@@ -165,11 +251,13 @@ function toast({ kind = "info", title, msg = "", action } = {}) {
     $(".t-body", el).appendChild(b);
   }
   $("#toasts").appendChild(el);
+  anim(el, { opacity: [0, 1], x: [28, 0], scale: [0.94, 1] }, SPRING);
   let killed = false;
   const dismiss = () => {
     if (killed) return; killed = true;
-    el.classList.add("out");
-    setTimeout(() => el.remove(), 300);
+    const out = anim(el, { opacity: 0, x: 28, scale: 0.94 }, { duration: 0.22, ease: "easeOut" });
+    if (out?.finished) out.finished.then(() => el.remove()).catch(() => el.remove());
+    else setTimeout(() => el.remove(), 240);
   };
   setTimeout(dismiss, action ? 8000 : 4500);
   return dismiss;
@@ -191,8 +279,11 @@ function openModal(node) {
   const scrim = h(`<div class="modal-scrim"></div>`);
   scrim.onclick = closeModal;
   root.appendChild(scrim);
+  node.classList.add("glass-float");
   root.appendChild(node);
   root.classList.add("open");
+  anim(scrim, { opacity: [0, 1] }, { duration: 0.2 });
+  anim(node, { opacity: [0, 1], scale: [0.93, 1], y: [10, 0] }, SPRING);
   document.addEventListener("keydown", modalEsc);
   const focusable = $("input, button", node);
   if (focusable) setTimeout(() => focusable.focus(), 50);
@@ -215,7 +306,7 @@ function confirmDialog({ title, message, confirmLabel = "Confirm", danger = fals
 }
 function openMenu(anchor, items) {
   document.querySelectorAll(".menu").forEach((m) => m.remove());
-  const menu = h(`<div class="menu"></div>`);
+  const menu = h(`<div class="menu glass-float"></div>`);
   items.forEach((it) => {
     if (it.sep) { menu.appendChild(h(`<div class="sep"></div>`)); return; }
     const b = h(`<button class="${it.danger ? "danger" : ""}">${icon(it.icon)}<span></span></button>`);
@@ -231,6 +322,7 @@ function openMenu(anchor, items) {
   left = Math.max(10, left);
   menu.style.left = left + "px";
   menu.style.top = top + "px";
+  anim(menu, { opacity: [0, 1], scale: [0.92, 1], y: [-6, 0] }, SPRING);
   const close = (e) => {
     if (!menu.contains(e.target) && e.target !== anchor) {
       menu.remove(); document.removeEventListener("mousedown", close);
@@ -247,7 +339,11 @@ function resolvedTheme() {
   const t = state.settings.theme;
   return t === "system" ? (mql.matches ? "dark" : "light") : t;
 }
-function applyTheme() { document.documentElement.dataset.theme = resolvedTheme(); }
+function applyTheme() {
+  document.documentElement.dataset.theme = resolvedTheme();
+  // keep the macOS blur behind the window at the same brightness as the glass
+  window.acs?.setAppearance?.(state.settings.theme);
+}
 function setTheme(t) {
   state.settings.theme = t; store.set("settings", state.settings); applyTheme();
 }
@@ -335,9 +431,9 @@ class Player {
     const { ctx, cw, ch } = this;
     ctx.clearRect(0, 0, cw, ch);
     const prog = this.audio.duration ? this.audio.currentTime / this.audio.duration : 0;
-    const grad = ctx.createLinearGradient(0, 0, cw, 0);
-    grad.addColorStop(0, "#7C6CFF"); grad.addColorStop(1, "#4D9FFF");
-    const faint = getComputedStyle(document.documentElement).getPropertyValue("--fill-softer") || "rgba(150,150,160,0.2)";
+    const cs = getComputedStyle(document.documentElement);
+    const grad = (cs.getPropertyValue("--accent") || "#007AFF").trim();
+    const faint = cs.getPropertyValue("--fill-softer") || "rgba(150,150,160,0.2)";
     const peaks = this.peaks || Array(160).fill(0.15);
     const n = peaks.length;
     const gap = this.mini ? 1.5 : 2;
@@ -351,7 +447,11 @@ class Player {
       roundRect(ctx, x, y, bw, bh, r); ctx.fill();
     }
     this.renderTime();
-    if (this.playing) this.raf = requestAnimationFrame(() => this.drawProgress());
+    if (this.playing) {
+      // feed the light field from the bar currently under the playhead
+      ambient.pulse(peaks[Math.min(n - 1, Math.floor(prog * n))] * 0.95);
+      this.raf = requestAnimationFrame(() => this.drawProgress());
+    }
   }
   renderTime() {
     const c = fmt.dur(this.audio.currentTime || 0);
@@ -437,15 +537,25 @@ function runJob(kind, jobId, { onDone, onError } = {}) {
 // ============================================================================
 // NAVIGATION / SHELL
 // ============================================================================
+// Grouped like a native sidebar: what you make, what you have, then the app
+// itself. Importing a voice is a task rather than a place, so it is reached from
+// My Voices and the Vocal Swapper instead of holding a permanent seat here.
 const NAV = [
-  { id: "dashboard", label: "Dashboard", icon: "dashboard" },
-  { id: "swap", label: "Vocal Swapper", icon: "swap" },
-  { id: "train", label: "Voice Cloning", icon: "clone" },
-  { id: "voices", label: "My Voices", icon: "voices" },
-  { id: "import", label: "Import Voice", icon: "upload" },
-  { id: "library", label: "Library", icon: "library" },
-  { id: "settings", label: "Settings", icon: "settings" },
+  { group: "", items: [{ id: "dashboard", label: "Home", icon: "home" }] },
+  { group: "Create", items: [
+    { id: "swap", label: "Vocal Swapper", icon: "swap" },
+    { id: "train", label: "Voice Cloning", icon: "clone" },
+  ] },
+  { group: "Library", items: [
+    { id: "voices", label: "My Voices", icon: "voices" },
+    { id: "library", label: "Covers", icon: "library" },
+  ] },
+  { group: "App", items: [{ id: "settings", label: "Settings", icon: "settings" }] },
 ];
+const ROUTE_TITLE = {
+  dashboard: "Home", swap: "Vocal Swapper", train: "Voice Cloning",
+  voices: "My Voices", import: "Import Voice", library: "Covers", settings: "Settings",
+};
 
 function renderSidebar() {
   const sb = $("#sidebar");
@@ -457,26 +567,26 @@ function renderSidebar() {
   </div>`));
 
   const nav = h(`<nav id="nav"><div id="nav-lozenge"></div></nav>`);
-  NAV.forEach((item) => {
-    const b = h(`<button class="nav-item" data-route="${item.id}">
-      ${icon(item.icon)}<span class="label">${item.label}</span></button>`);
-    b.onclick = () => go(item.id);
-    nav.appendChild(b);
+  NAV.forEach((sec) => {
+    if (sec.group) nav.appendChild(h(`<div class="nav-group">${sec.group}</div>`));
+    sec.items.forEach((item) => {
+      const b = h(`<button class="nav-item" data-route="${item.id}">
+        ${icon(item.icon)}<span class="label">${item.label}</span></button>`);
+      b.onclick = () => go(item.id);
+      nav.appendChild(b);
+    });
   });
   sb.appendChild(nav);
 
-  // footer
-  const hw = state.health?.hardware;
+  // footer — identity, theme, and the rail toggle. Engine status lives in the
+  // toolbar, where it reads as a status item rather than a nav row.
   const footer = h(`<div id="sidebar-footer">
-    <div class="compute-badge ${state.health ? "" : "offline"}">
-      <span class="dot"></span><span>${hw ? hw.label : "engine offline"}</span>
-    </div>
     <div class="footer-row">
       <button class="user-chip" id="user-chip">
         <span class="avatar" id="side-avatar"></span>
         <span class="who"><span class="nm" id="side-name"></span><span class="sub" id="side-sub"></span></span>
       </button>
-      <button class="icon-btn" id="theme-btn" title="Toggle theme"></button>
+      <button class="icon-btn" id="theme-btn" title="Switch theme"></button>
     </div>
     <button class="icon-btn collapse-btn" id="collapse-btn" title="Collapse sidebar">${icon("panelLeft")}</button>
   </div>`);
@@ -520,12 +630,53 @@ function markActiveNav() {
   $$(".nav-item").forEach((n) => n.classList.toggle("active", n.dataset.route === state.route));
   moveLozenge();
 }
+// The glass capsule springs between rows instead of cutting.
 function moveLozenge() {
   const active = $(`.nav-item[data-route="${state.route}"]`);
   const loz = $("#nav-lozenge");
-  if (!active || !loz) return;
-  loz.style.opacity = "1";
-  loz.style.transform = `translateY(${active.offsetTop}px)`;
+  if (!loz) return;
+  if (!active) { loz.style.opacity = "0"; return; }
+  const top = active.offsetTop;
+  if (loz.dataset.placed && loz.dataset.y === String(top)) return;
+  loz.dataset.y = String(top);
+  loz.style.height = active.offsetHeight + "px";
+  if (loz.dataset.placed) {
+    anim(loz, { y: top, opacity: 1 }, SPRING);
+  } else {
+    loz.dataset.placed = "1";
+    loz.style.transform = `translateY(${top}px)`;
+    anim(loz, { opacity: [0, 1] }, { duration: 0.28, ease: EASE_OUT });
+  }
+}
+
+// ---- Toolbar: engine status, plus the compact title iOS-style large headers
+// hand off to once the page scrolls under the bar. -------------------------
+function renderToolbar() {
+  const right = $("#tb-right");
+  if (!right) return;
+  const hw = state.health?.hardware;
+  right.innerHTML = "";
+  const badge = h(`<span class="compute-badge ${state.health ? "" : "offline"}"
+    title="Where inference runs"><span class="dot"></span><span class="lbl"></span></span>`);
+  $(".lbl", badge).textContent = state.health ? (hw?.label || "Local engine") : "Engine offline";
+  right.appendChild(badge);
+}
+function setToolbarTitle(title) {
+  const el = $("#tb-title");
+  if (el) el.textContent = title || "";
+}
+function initToolbarScroll() {
+  const sc = $("#scroll");
+  if (!sc) return;
+  let queued = 0;
+  sc.addEventListener("scroll", () => {
+    if (queued) return;
+    queued = requestAnimationFrame(() => {
+      queued = 0;
+      const op = Math.min(1, Math.max(0, (sc.scrollTop - 8) / 28));
+      document.documentElement.style.setProperty("--bar-op", op.toFixed(3));
+    });
+  }, { passive: true });
 }
 
 const screens = {}; // route -> render fn (assigned below)
@@ -533,12 +684,14 @@ function go(route) {
   state.route = route;
   clearPlayers();
   markActiveNav();
+  setToolbarTitle(ROUTE_TITLE[route]);
   const mount = $("#screen");
   mount.innerHTML = "";
   const node = screens[route]();
-  node.classList.add("screen-enter");
   mount.appendChild(node);
-  $("#content").scrollTop = 0;
+  $("#scroll").scrollTop = 0;
+  document.documentElement.style.setProperty("--bar-op", "0");
+  enterScreen(node);
 }
 
 // ============================================================================
@@ -549,6 +702,7 @@ function showApp() {
   $("#auth").innerHTML = "";
   $("#app").classList.remove("hidden");
   renderSidebar();
+  renderToolbar();
   go("dashboard");
 }
 function signOut() {
@@ -564,7 +718,7 @@ function showAuth() {
 
   function render() {
     auth.innerHTML = "";
-    const card = h(`<div class="auth-card glass">
+    const card = h(`<div class="auth-card glass-float">
       <div class="auth-brand">
         <div class="glyph"><i></i><i></i><i></i><i></i><i></i></div>
         <div class="auth-word">${BRAND.name}</div>
@@ -584,6 +738,7 @@ function showAuth() {
       <button class="btn ghost full" id="guest-btn" style="width:100%;justify-content:center">Continue without account</button>
     </div>`);
     auth.appendChild(card);
+    anim(card, { opacity: [0, 1], scale: [0.95, 1], y: [14, 0] }, SPRING_SOFT);
     $("#auth-switch", card).onclick = () => { mode = mode === "signin" ? "register" : "signin"; render(); };
     $("#guest-btn", card).onclick = () => {
       state.guest = true; state.user = null; store.set("session", "__guest__"); showApp();
@@ -644,57 +799,90 @@ function showAuth() {
 // ============================================================================
 screens.dashboard = () => {
   const wrap = h(`<div></div>`);
-  const name = state.guest ? "there" : (state.user?.name?.split(" ")[0] || "there");
+  const first = state.guest ? "" : (state.user?.name?.split(" ")[0] || "");
   const hour = new Date().getHours();
   const greet = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-  wrap.appendChild(h(`<div class="page-head">
-    <h1 class="page-title">${greet}, ${escapeHtml(name)}</h1>
-    <p class="page-sub">${BRAND.tagline}</p>
-  </div>`));
 
-  const trainingHours = Object.values(state.modelMeta).reduce((s, m) => s + (m.trainSeconds || 0), 0) / 3600;
+  // Hero states what the app is for, and the meter beside it is the same live
+  // level readout that lights the room behind the glass.
+  const hero = h(`<section class="hero glass">
+    <div class="hero-text">
+      <div class="hero-eyebrow">${escapeHtml(first ? `${greet}, ${first}` : greet)}</div>
+      <h2>Any song.<br/><em>Your voice.</em></h2>
+      <p>Pull the vocal out, sing it back in a voice you own, and remix it —
+         nothing leaves this machine.</p>
+      <div class="hero-actions">
+        <button class="btn-primary" id="hero-new">${icon("headphones")} New cover</button>
+      </div>
+    </div>
+    <div class="hero-meter" aria-hidden="true"></div>
+  </section>`);
+  const meter = $(".hero-meter", hero);
+  [0.32, 0.6, 0.42, 1, 0.7, 0.5, 0.86, 0.4].forEach((f) => {
+    const bar = h(`<i></i>`);
+    bar.style.height = Math.round(f * 100) + "%";
+    meter.appendChild(bar);
+  });
+  $("#hero-new", hero).onclick = () => go("swap");
+  wrap.appendChild(hero);
+
+  const trainedSeconds = Object.values(state.modelMeta).reduce((s, m) => s + (m.trainSeconds || 0), 0);
+  const trainingHours = trainedSeconds / 3600;
   const stats = [
-    { icon: "voices", val: state.models.length, label: "Voice models" },
-    { icon: "music", val: state.covers.length, label: "Covers generated" },
-    { icon: "clock", val: trainingHours < 0.1 && trainingHours > 0 ? "<0.1" : trainingHours.toFixed(1), label: "Training hours" },
+    { icon: "voices", val: state.models.length, top: "Voices",
+      label: state.models.length === 1 ? "model on this Mac" : "models on this Mac" },
+    { icon: "music", val: state.covers.length, top: "Covers",
+      label: state.covers.length === 1 ? "cover made" : "covers made" },
+    { icon: "clock", top: "Training",
+      val: !trainedSeconds ? "—" : trainingHours < 0.1 ? "<0.1" : trainingHours.toFixed(1),
+      label: trainedSeconds ? "hours of training" : "no training yet" },
   ];
   const grid = h(`<div class="stat-grid"></div>`);
   stats.forEach((s) => grid.appendChild(h(`<div class="stat-card glass">
-    <div class="s-icon">${icon(s.icon)}</div>
+    <div class="s-top">${icon(s.icon)}${s.top}</div>
     <div class="s-val">${s.val}</div><div class="s-label">${s.label}</div>
   </div>`)));
   wrap.appendChild(grid);
 
-  wrap.appendChild(h(`<p class="section-label">Quick actions</p>`));
+  const startSec = h(`<div class="section"><p class="section-label">Add a voice</p></div>`);
   const quick = h(`<div class="quick-grid"></div>`);
   const qc = (ic, title, sub, route) => {
-    const c = h(`<button class="quick-card glass"><div class="q-icon">${icon(ic)}</div>
-      <div><div class="q-title">${title}</div><div class="q-sub">${sub}</div></div></button>`);
+    const c = h(`<button class="quick-card glass"><span class="q-icon">${icon(ic)}</span>
+      <span><span class="q-title">${title}</span><span class="q-sub">${sub}</span></span>
+      <span class="q-go">${icon("chevron")}</span></button>`);
     c.onclick = () => go(route); return c;
   };
-  quick.appendChild(qc("headphones", "New Cover", "Swap vocals on a song", "swap"));
-  quick.appendChild(qc("sparkles", "Train a Voice", "Clone a voice from samples", "train"));
-  wrap.appendChild(quick);
+  quick.appendChild(qc("sparkles", "Train a voice", "Clone one from your own recordings", "train"));
+  quick.appendChild(qc("upload", "Import a voice", "Bring in an RVC .pth you already have", "import"));
+  startSec.appendChild(quick);
+  wrap.appendChild(startSec);
 
-  wrap.appendChild(h(`<p class="section-label">Recent covers</p>`));
+  const recent = h(`<div class="section"><p class="section-label">Recent covers</p></div>`);
   if (!state.covers.length) {
-    wrap.appendChild(emptyState("music", "No covers yet",
-      "Drop a song in Vocal Swapper to make your first one.", "New Cover", () => go("swap")));
+    recent.appendChild(emptyState("music", "Nothing here yet",
+      "Drop a song into the Vocal Swapper and your first cover shows up here.",
+      "New cover", () => go("swap")));
   } else {
     const list = h(`<div class="col"></div>`);
-    state.covers.slice(0, 4).forEach((c) => {
+    state.covers.slice(0, 3).forEach((c) => {
       const meta = state.coverMeta[c.name] || {};
       const card = h(`<div class="card glass">
         <div class="status-head">
-          <div><div class="card-title">${escapeHtml(meta.song || "Cover")}</div>
-          <div class="card-hint" style="margin:2px 0 0">${escapeHtml(meta.voice || "—")} · ${fmt.date(c.modified * 1000)}</div></div>
+          <div><div class="card-title">${escapeHtml(meta.song || c.name)}</div>
+          <div class="card-hint" style="margin:1px 0 0">${escapeHtml(meta.voice || "Unknown voice")} · ${fmt.date(c.modified * 1000)}</div></div>
         </div></div>`);
       const p = trackPlayer(new Player({ cover: `${API}/api/outputs/${encodeURIComponent(c.name)}`, mini: true }));
       card.appendChild(p.el);
       list.appendChild(card);
     });
-    wrap.appendChild(list);
+    recent.appendChild(list);
+    if (state.covers.length > 3) {
+      const more = h(`<button class="btn ghost mt-16">${icon("library")} See all ${state.covers.length} covers</button>`);
+      more.onclick = () => go("library");
+      recent.appendChild(more);
+    }
   }
+  wrap.appendChild(recent);
   return wrap;
 };
 
@@ -703,7 +891,7 @@ screens.dashboard = () => {
 // ============================================================================
 screens.swap = () => {
   const wrap = h(`<div></div>`);
-  wrap.appendChild(pageHead("Vocal Swapper", "Swap the vocals of any song with a voice you own."));
+  wrap.appendChild(pageHead("Vocal Swapper", "Replace a song's lead vocal with a voice you own."));
 
   const grid = h(`<div class="grid-2"></div>`);
   const left = h(`<div class="col"></div>`);
@@ -714,7 +902,7 @@ screens.swap = () => {
     <label class="field-label">Voice model</label>
     <div class="row"><div class="grow" id="model-picker"></div>
       <button class="icon-btn" id="refresh-models" title="Rescan voice models">${icon("refresh")}</button></div>
-    <div class="row mt-8"><button class="btn small" id="import-model">${icon("upload")} Import Voice…</button></div>
+    <div class="row mt-8"><button class="btn small" id="import-model">${icon("upload")} Import a voice…</button></div>
     <p class="card-hint" id="model-hint"></p>
   </div>`);
   left.appendChild(modelCard);
@@ -724,7 +912,8 @@ screens.swap = () => {
     <label class="field-label">Full song</label>
     <div class="dropzone" id="song-drop">
       <div class="dz-icon">${icon("headphones")}</div>
-      <div class="dz-text">Drop a song or <span class="link">browse</span></div>
+      <div class="dz-text">Drop a song, or <span class="link">choose a file</span></div>
+      <div class="dz-sub">MP3, WAV, FLAC or M4A</div>
       <input type="file" accept="audio/*" hidden id="song-input"/>
     </div>
     <div id="song-loaded" class="mt-16"></div>
@@ -765,7 +954,7 @@ screens.swap = () => {
 
   // --- sticky generate ---
   const sticky = h(`<div class="sticky-action">
-    <div class="tip-wrap"><button class="btn-primary full" id="generate-btn">${icon("sparkles")} Generate Cover</button></div>
+    <div class="tip-wrap"><button class="btn-primary full" id="generate-btn">${icon("sparkles")} Generate cover</button></div>
   </div>`);
   wrap.appendChild(sticky);
 
@@ -942,9 +1131,9 @@ function renderSwapResult() {
   } else if (j.status === "error") {
     host.appendChild(h(`<div class="empty" style="padding:24px"><div class="e-text" style="color:var(--err)">${escapeHtml(j.error || "Generation failed.")}</div></div>`));
   } else {
-    host.appendChild(h(`<div class="empty" style="padding:28px 20px">
+    host.appendChild(h(`<div class="empty" style="padding:26px 20px">
       <div class="e-glyph">${icon("music")}</div>
-      <div class="e-text">Your generated cover will appear here with a waveform player.</div></div>`));
+      <div class="e-text">The finished cover lands here, ready to play against the original and export.</div></div>`));
   }
 }
 
@@ -1018,12 +1207,10 @@ function fileName(path) {
 // ============================================================================
 screens.import = () => {
   const wrap = h(`<div class="import-page"></div>`);
-  const head = pageHead("Import Voice", "Add a trained RVC voice model from your computer.");
-  const back = h(`<button class="btn small">${icon("chevron")} My Voices</button>`);
-  back.onclick = () => go("voices");
-  head.querySelector(".page-head").appendChild(back);
-  head.querySelector(".page-head").style.cssText = "display:flex;justify-content:space-between;align-items:flex-end;gap:16px";
-  wrap.appendChild(head);
+  const back = h(`<button class="btn small">${icon("chevronLeft")} My Voices</button>`);
+  back.onclick = () => { resetImportWork(); go("voices"); };
+  wrap.appendChild(pageHead("Import a voice",
+    "Add an RVC voice model that already lives on this Mac.", back));
 
   const layout = h(`<div class="import-layout">
     <section class="card glass import-card">
@@ -1120,11 +1307,13 @@ function resetImportWork() { Object.assign(importWork, { pthPath: "", indexPath:
 // ============================================================================
 screens.train = () => {
   const wrap = h(`<div></div>`);
-  wrap.appendChild(pageHead("Voice Cloning", "Train an RVC / Applio voice model from clean vocal samples."));
+  wrap.appendChild(pageHead("Voice Cloning", "Train a voice model from clean recordings of a single singer."));
 
   // dismissible banners
   if (!store.get("dismiss.tips", false)) wrap.appendChild(banner("info", "tips",
-    `<b>Dataset tips:</b> 10–30 minutes of clean, dry vocals — no reverb, no background music, one speaker. Singing beats read speech for song covers. Use consented voices only.`));
+    `<b>What makes a good dataset:</b> 10–30 minutes of dry vocals from one person —
+     no reverb, no backing track. Singing trains better than speech for covers.
+     Only train on voices you have permission to use.`));
   const hw = state.health?.hardware;
   if (hw?.training_warning && !store.get("dismiss.cpuwarn", false))
     wrap.appendChild(banner("warn", "cpuwarn", `<b>Heads up:</b> ${escapeHtml(hw.training_warning)}`));
@@ -1137,7 +1326,8 @@ screens.train = () => {
     <label class="field-label">Voice samples</label>
     <div class="dropzone" id="samples-drop">
       <div class="dz-icon">${icon("sparkles")}</div>
-      <div class="dz-text">Drop voice clips or <span class="link">browse</span></div>
+      <div class="dz-text">Drop voice clips, or <span class="link">choose files</span></div>
+      <div class="dz-sub">Dry vocals only — 10 to 30 minutes works best</div>
       <input type="file" accept="audio/*" multiple hidden id="samples-input"/>
     </div>
     <div class="file-list" id="samples-list"></div>
@@ -1172,7 +1362,7 @@ screens.train = () => {
   wrap.appendChild(grid);
 
   const sticky = h(`<div class="sticky-action">
-    <div class="tip-wrap"><button class="btn-primary full" id="train-btn">${icon("sparkles")} Train Voice Model</button></div>
+    <div class="tip-wrap"><button class="btn-primary full" id="train-btn">${icon("sparkles")} Train the voice</button></div>
   </div>`);
   wrap.appendChild(sticky);
   wrap.appendChild(h(`<p class="card-hint" style="text-align:center;margin-top:12px">
@@ -1246,9 +1436,9 @@ function updateTrainEnabled() {
   const ready = (trainWork.files.length || trainWork.datasetDir.trim()) && !running;
   btn.disabled = !ready;
   const tip = btn.closest(".tip-wrap");
-  if (running) { btn.innerHTML = `${icon("sparkles")} Training…`; tip.dataset.tip = "A training job is already running"; }
-  else { btn.innerHTML = `${icon("sparkles")} Train Voice Model`;
-    if (!ready) tip.dataset.tip = "Add voice samples or a folder path first"; else tip.removeAttribute("data-tip"); }
+  if (running) { btn.innerHTML = `${icon("refresh", "spin")} Training…`; tip.dataset.tip = "A training run is already going"; }
+  else { btn.innerHTML = `${icon("sparkles")} Train the voice`;
+    if (!ready) tip.dataset.tip = "Add voice clips or point at a folder first"; else tip.removeAttribute("data-tip"); }
 }
 
 function renderTrainStatus() {
@@ -1367,18 +1557,17 @@ function appendLog(kind, line) {
 // ============================================================================
 screens.voices = () => {
   const wrap = h(`<div></div>`);
-  const head = pageHead("My Voices", "Your trained and imported voice models.");
-  const headActions = h(`<div class="row"><button class="btn small" id="voices-refresh">${icon("refresh")} Refresh</button><button class="btn-primary compact" id="voices-import">${icon("plus")} Import Voice</button></div>`);
-  const refresh = $("#voices-refresh", headActions);
+  const refresh = h(`<button class="btn small">${icon("refresh")} Rescan</button>`);
   refresh.onclick = async () => { await loadModels(); go("voices"); };
-  $("#voices-import", headActions).onclick = () => go("import");
-  head.querySelector(".page-head").appendChild(headActions);
-  head.querySelector(".page-head").style.cssText = "display:flex;justify-content:space-between;align-items:flex-end;gap:16px";
-  wrap.appendChild(head);
+  const importBtn = h(`<button class="btn-primary compact">${icon("plus")} Import a voice</button>`);
+  importBtn.onclick = () => go("import");
+  wrap.appendChild(pageHead("My Voices",
+    "Every voice model you have trained or imported.", [refresh, importBtn]));
 
   if (!state.models.length) {
-    wrap.appendChild(emptyState("voices", "No voice models yet",
-      "Train a new voice or import a compatible RVC model from your computer.", "Import a Voice", () => go("import")));
+    wrap.appendChild(emptyState("voices", "No voices yet",
+      "Train one from your own recordings, or import an RVC .pth you already have.",
+      "Import a voice", () => go("import")));
     return wrap;
   }
   const grid = h(`<div class="voice-grid"></div>`);
@@ -1390,9 +1579,9 @@ function voiceCard(m) {
   const meta = state.modelMeta[m.name] || {};
   const card = h(`<div class="voice-card glass">
     <div class="vc-head">
-      <span class="avatar" style="border-radius:12px;flex-basis:38px;width:38px;height:38px">${icon("disc")}</span>
+      <span class="vc-disc">${icon("disc")}</span>
       <div class="vc-name">${escapeHtml(m.name)}</div>
-      <button class="icon-btn" style="width:30px;height:30px;flex-basis:30px" title="More">${icon("dots")}</button>
+      <button class="icon-btn tiny" title="More actions">${icon("dots")}</button>
     </div>
     <div class="vc-meta">
       <span class="chip accent">${meta.sampleRate ? (+meta.sampleRate / 1000) + "k Hz" : (m.has_index ? "has index" : "no index")}</span>
@@ -1472,16 +1661,13 @@ function deleteModel(m) {
 // ============================================================================
 screens.library = () => {
   const wrap = h(`<div></div>`);
-  const head = pageHead("Library", "Every cover you've generated.");
-  const refresh = h(`<button class="btn small">${icon("refresh")} Refresh</button>`);
+  const refresh = h(`<button class="btn small">${icon("refresh")} Rescan</button>`);
   refresh.onclick = async () => { await loadCovers(); go("library"); };
-  head.querySelector(".page-head").appendChild(refresh);
-  head.querySelector(".page-head").style.cssText = "display:flex;justify-content:space-between;align-items:flex-end;gap:16px";
-  wrap.appendChild(head);
+  wrap.appendChild(pageHead("Covers", "Every cover you have made, newest first.", refresh));
 
   if (!state.covers.length) {
-    wrap.appendChild(emptyState("music", "No covers yet",
-      "Generate your first cover in Vocal Swapper and it'll show up here.", "New Cover", () => go("swap")));
+    wrap.appendChild(emptyState("music", "Nothing here yet",
+      "Make a cover in the Vocal Swapper and it lands here.", "New cover", () => go("swap")));
     return wrap;
   }
   const table = h(`<div class="data-table glass">
@@ -1494,9 +1680,9 @@ screens.library = () => {
       <div class="cell hide-sm">${escapeHtml(meta.voice || "—")}</div>
       <div class="cell hide-sm">${fmt.date(c.modified * 1000)}</div>
       <div class="actions">
-        <button class="icon-btn" data-play title="Play" style="width:30px;height:30px;flex-basis:30px">${icon("play")}</button>
-        <button class="icon-btn" data-export title="Export" style="width:30px;height:30px;flex-basis:30px">${icon("download")}</button>
-        <button class="icon-btn" data-del title="Delete" style="width:30px;height:30px;flex-basis:30px">${icon("trash")}</button>
+        <button class="icon-btn tiny" data-play title="Play">${icon("play")}</button>
+        <button class="icon-btn tiny" data-export title="Export">${icon("download")}</button>
+        <button class="icon-btn tiny" data-del title="Delete">${icon("trash")}</button>
       </div></div>`);
     const url = `${API}/api/outputs/${encodeURIComponent(c.name)}`;
     let expanded = null;
@@ -1578,9 +1764,11 @@ screens.settings = () => {
   // Appearance
   const appear = section("Appearance");
   const themeCard = h(`<div class="card glass"><label class="field-label">Theme</label>
-    <div class="row" id="theme-seg" style="gap:8px"></div></div>`);
+    <div class="seg" id="theme-seg"></div>
+    <p class="card-hint">Light and dark both sit on the desktop's own blur, so the
+      window picks up whatever is behind it.</p></div>`);
   [["system", "monitor", "System"], ["light", "sun", "Light"], ["dark", "moon", "Dark"]].forEach(([val, ic, lbl]) => {
-    const b = h(`<button class="btn ${state.settings.theme === val ? "" : "ghost"}" style="flex:1;justify-content:center">${icon(ic)} ${lbl}</button>`);
+    const b = h(`<button class="${state.settings.theme === val ? "on" : ""}">${icon(ic)} ${lbl}</button>`);
     b.onclick = () => { setTheme(val); go("settings"); renderSidebar(); };
     $("#theme-seg", themeCard).appendChild(b);
   });
@@ -1644,11 +1832,11 @@ screens.settings = () => {
 
   // About
   const about = section("About");
-  about.appendChild(h(`<div class="card glass" style="text-align:center;padding:28px">
-    <div class="glyph" style="height:30px;justify-content:center;margin-bottom:12px"><i></i><i></i><i></i><i></i><i></i></div>
-    <div style="font-family:var(--font-display);font-size:1.4rem;font-weight:700;color:var(--text-strong)">${BRAND.name} <span style="color:var(--faint);font-weight:500;font-size:0.9rem">${BRAND.version}</span></div>
-    <div class="card-hint" style="margin-top:4px">${BRAND.tagline}</div>
-    <div class="card-hint" style="margin-top:10px">Fully local AI song covers — your audio never leaves this machine.</div>
+  about.appendChild(h(`<div class="card glass" style="text-align:center;padding:26px">
+    <div class="glyph" style="height:26px;justify-content:center;margin-bottom:14px"><i></i><i></i><i></i><i></i><i></i></div>
+    <div style="font-family:var(--font-round);font-size:21px;font-weight:700;letter-spacing:-0.02em;color:var(--text-strong)">${BRAND.name}
+      <span style="font-family:var(--font-mono);color:var(--faint);font-weight:500;font-size:12px">${BRAND.version}</span></div>
+    <div class="card-hint" style="margin-top:6px">${BRAND.tagline}</div>
   </div>`));
   wrap.appendChild(about);
 
@@ -1658,12 +1846,23 @@ screens.settings = () => {
 // ============================================================================
 // Small shared view helpers
 // ============================================================================
-function pageHead(title, sub) {
-  return h(`<div><div class="page-head"><div><h1 class="page-title">${title}</h1>
-    <p class="page-sub">${sub}</p></div></div></div>`);
+// A large title with optional trailing controls. The toolbar shows a compact
+// copy of the same title once this one scrolls out of view.
+function pageHead(title, sub, actions) {
+  const el = h(`<header class="page-head">
+    <div class="head-text"><h1 class="page-title"></h1><p class="page-sub"></p></div>
+  </header>`);
+  $(".page-title", el).textContent = title;
+  $(".page-sub", el).textContent = sub;
+  if (actions) {
+    const box = h(`<div class="page-head-actions"></div>`);
+    (Array.isArray(actions) ? actions : [actions]).forEach((n) => box.appendChild(n));
+    el.appendChild(box);
+  }
+  return el;
 }
 function section(label) {
-  const s = h(`<div style="margin-bottom:28px"></div>`);
+  const s = h(`<div class="section"></div>`);
   s.appendChild(h(`<p class="section-label">${label}</p>`));
   return s;
 }
@@ -1692,6 +1891,7 @@ function escapeHtml(s) {
 // ============================================================================
 async function boot() {
   applyTheme();
+  initToolbarScroll();
   const cfg = await window.acs.getConfig();
   API = `http://127.0.0.1:${cfg.port}`;
 

@@ -4,32 +4,21 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Vocalis</title>
-  <link rel="stylesheet" href="styles.css" />
+  <!--
+    Served from app:// (see main.js), which gives the renderer a real secure
+    origin and lets it use ES modules. file:// blocks both.
+  -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob: http://127.0.0.1:*; connect-src 'self' http://127.0.0.1:*; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+  <link rel="stylesheet" href="/styles/tokens.css" />
+  <link rel="stylesheet" href="/styles/base.css" />
+  <link rel="stylesheet" href="/components/primitives/primitives.css" />
+  <link rel="stylesheet" href="/components/meter/meter.css" />
+  <link rel="stylesheet" href="/styles/shell.css" />
 </head>
 <body>
-  <!-- ambient mesh-gradient blobs the glass refracts -->
-  <div id="ambient" aria-hidden="true">
-    <div class="blob b1"></div>
-    <div class="blob b2"></div>
-    <div class="blob b3"></div>
-  </div>
-
-  <!-- draggable native titlebar region -->
-  <div id="titlebar" aria-hidden="true"></div>
-
-  <!-- app shell (rendered/managed by app.js) -->
-  <div id="app" class="hidden">
-    <aside id="sidebar" class="glass"></aside>
-    <div id="content"><div id="screen"></div></div>
-  </div>
-
-  <!-- auth overlay (shown until signed in / continued as guest) -->
-  <div id="auth" class="hidden"></div>
-
-  <!-- floating layer -->
-  <div id="toasts"></div>
-  <div id="modal-root"></div>
-
-  <script src="app.js"></script>
+  <div id="root"></div>
+  <div id="overlay-root"></div>
+  <script type="module" src="/app/boot.js"></script>
 </body>
 </html>

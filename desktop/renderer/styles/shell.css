@@ -1,0 +1,257 @@
+/* ============================================================================
+   App shell — §5, §6, §8.
+
+   Layout: vibrant sidebar | opaque content (toolbar / scroll area / player bar).
+   Translucency is used in exactly one place: the sidebar. The content area is
+   opaque --gr-900. Electron has no per-region vibrancy, so the window carries
+   the 'sidebar' material and the content paints over it.
+   ========================================================================== */
+
+#shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  height: 100vh;
+  overflow: hidden;
+}
+#shell[data-sidebar="hidden"] { grid-template-columns: 0 1fr; }
+
+/* ---- Sidebar ------------------------------------------------------------ */
+
+.sidebar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  /* Transparent so the window's AppKit 'sidebar' material shows through.
+     .vibrant is what base.css swaps to solid under reduced-transparency. */
+  background: transparent;
+}
+#shell[data-sidebar="hidden"] .sidebar { display: none; }
+
+/* The top 52px is a drag region on BOTH sides of the split (§ Prompt 1). */
+.sidebar__top {
+  height: var(--toolbar-h);
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-3);
+  padding-left: 78px;          /* clear of the traffic lights at x:18 */
+}
+
+.wordmark { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.wordmark__glyph { display: flex; align-items: center; gap: 2px; height: 16px; color: var(--accent); }
+.wordmark__glyph i { width: 2px; border-radius: 1px; background: currentColor; display: block; }
+.wordmark__name { color: var(--text-primary); white-space: nowrap; }
+.wordmark__badge {
+  flex: none;
+  padding: 0 var(--sp-1);
+  height: 16px;
+  display: inline-flex; align-items: center;
+  border-radius: var(--r-chip);
+  background: var(--gr-750);
+  color: var(--text-secondary);
+  font-size: var(--t-caption-size);
+  font-weight: var(--t-label-weight);
+}
+
+.sidebar__scroll { flex: 1; overflow-y: auto; padding: var(--sp-2) var(--sp-2) var(--sp-3); }
+
+.sidebar__section + .sidebar__section { margin-top: var(--sp-4); }
+.sidebar__section-title {
+  /* Title Case, 11px semibold — NOT all-caps, not letterspaced wide (§4/V4). */
+  padding: 0 var(--sp-2) var(--sp-1);
+}
+
+.nav-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  height: var(--row-sidebar);
+  padding: 0 var(--sp-2);
+  border-radius: var(--r-control);
+  color: var(--text-secondary);
+  font-size: var(--t-body-size);
+  text-align: left;
+  position: relative;
+  transition: background-color var(--dur-press) var(--ease-exit),
+              color var(--dur-press) var(--ease-exit);
+}
+.nav-row:hover:not(.nav-row--on) { background: var(--gr-800); color: var(--text-primary); }
+.nav-row__icon { flex: none; display: inline-flex; color: currentColor; }
+.nav-row__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-row__shortcut { flex: none; color: var(--text-tertiary); }
+
+.nav-row--on {
+  background: var(--tint);
+  color: var(--text-primary);
+  font-weight: var(--t-body-em-weight);
+}
+.nav-row--on .nav-row__icon { color: var(--accent); }
+
+/* Activity rows carry a 14px ring instead of an icon. */
+.nav-row__ring { flex: none; display: inline-flex; }
+.nav-row__pct { flex: none; color: var(--text-secondary); }
+
+/* ---- Account row -------------------------------------------------------- */
+
+.account {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-top: 1px solid var(--hairline);
+  min-width: 0;
+}
+.avatar {
+  flex: none;
+  width: 28px; height: 28px;
+  border-radius: 999px;
+  /* Flat fill — the old build used a pink/purple gradient here (V1). */
+  background: var(--gr-700);
+  color: var(--gr-200);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: var(--t-body-size);
+  font-weight: var(--t-body-em-weight);
+  overflow: hidden;
+}
+.avatar img { width: 100%; height: 100%; object-fit: cover; }
+.account__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- Sidebar resize handle ---------------------------------------------- */
+
+.sidebar__grip {
+  position: absolute;
+  top: 0; right: -2px; bottom: 0;
+  width: 5px;
+  cursor: col-resize;
+  z-index: 5;
+}
+.sidebar__grip:hover, .sidebar__grip[data-dragging] { background: var(--accent); opacity: 0.55; }
+
+/* ---- Content ------------------------------------------------------------ */
+
+.content {
+  position: relative;
+  display: grid;
+  grid-template-rows: var(--toolbar-h) 1fr auto;
+  min-width: 0;
+  /* Level 0, opaque. This is the single biggest fix to how "Mac" it feels. */
+  background: var(--bg-content);
+  overflow: hidden;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0 var(--pad-window);
+  min-width: 0;
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--dur-panel) var(--ease-exit);
+}
+/* Hairline appears only once the content has scrolled (§6). */
+.toolbar[data-scrolled] { border-bottom-color: var(--hairline); }
+
+.toolbar__title { flex: none; color: var(--text-primary); }
+.toolbar__spacer { flex: 1; }
+.toolbar__actions { flex: none; display: flex; align-items: center; gap: var(--sp-2); }
+.toolbar__search { width: 200px; }
+.toolbar__search .field__error { display: none; }
+
+.scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 var(--pad-window) var(--pad-window);
+}
+
+/* ---- List rows (§6) ----------------------------------------------------- */
+
+.list { display: flex; flex-direction: column; }
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  height: var(--row-list);
+  padding: 0 var(--sp-2);
+  border-radius: var(--r-card);
+  position: relative;
+  cursor: default;
+  color: var(--text-primary);
+}
+.row + .row::before {
+  content: "";
+  position: absolute;
+  top: 0; left: var(--sp-3); right: 0;
+  height: 1px;
+  background: var(--hairline);
+}
+.row:hover { background: var(--bg-raised); }
+.row:hover::before, .row:hover + .row::before { background: transparent; }
+.row--on { background: var(--tint); }
+.row--on::before, .row--on + .row::before { background: transparent; }
+.row--on::after {
+  content: "";
+  position: absolute;
+  left: 0; top: 4px; bottom: 4px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+.row__main { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+.row__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row__meta { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row__trail { flex: none; display: flex; align-items: center; gap: var(--sp-1); opacity: 0; }
+.row:hover .row__trail, .row--on .row__trail, .row:focus-within .row__trail { opacity: 1; }
+
+.list__footer {
+  padding: var(--sp-3) var(--sp-2) 0;
+  color: var(--text-secondary);
+}
+
+/* ---- Player bar (§8) ---------------------------------------------------- */
+
+.player {
+  height: var(--player-h);
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 0 var(--pad-window);
+  border-top: 1px solid var(--hairline);
+  background: var(--bg-raised);
+  min-width: 0;
+}
+.player__meta { flex: none; width: 160px; min-width: 0; display: flex; flex-direction: column; }
+.player__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.player__voice { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.player__wave { flex: 1; min-width: 80px; }
+
+/* ---- Full-view flow (New Cover / Train a Voice) ------------------------- */
+/* Pushes over the library rather than living in the sidebar (§8). */
+
+.flow {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-rows: var(--toolbar-h) 1fr;
+  background: var(--bg-content);
+  animation: flow-in var(--dur-view) var(--ease-enter);
+}
+@keyframes flow-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) { .flow { animation: none; } }
+
+/* ---- Drag region -------------------------------------------------------- */
+/* The top 52px of both panes drags the window; controls opt out via .no-drag. */
+
+.sidebar__top, .toolbar { -webkit-app-region: drag; }
+.sidebar__top button, .sidebar__top a,
+.toolbar button, .toolbar input, .toolbar select, .toolbar a,
+.toolbar [tabindex] { -webkit-app-region: no-drag; }

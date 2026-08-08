@@ -1,0 +1,172 @@
+/* ============================================================================
+   Vocalis — Base
+   ----------------------------------------------------------------------------
+   Reset, global type, focus, scrollbars, Electron drag utilities, and the
+   accessibility media queries. No hex colours here — tokens.css only.
+   ========================================================================== */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, div, span, h1, h2, h3, h4, h5, h6, p, blockquote, pre,
+a, abbr, address, cite, code, del, dfn, em, img, ins, kbd, q, s, samp,
+small, strong, sub, sup, var, b, i, dl, dt, dd, ol, ul, li, fieldset,
+form, label, legend, table, caption, tbody, tfoot, thead, tr, th, td,
+article, aside, canvas, details, figcaption, figure, footer, header,
+menu, nav, output, section, summary {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font: inherit;
+  vertical-align: baseline;
+}
+
+article, aside, details, figcaption, figure, footer, header, main,
+menu, nav, section { display: block; }
+
+ol, ul { list-style: none; }
+table { border-collapse: collapse; border-spacing: 0; }
+img, svg, video, canvas { display: block; max-width: 100%; }
+
+/* ---- Global type -------------------------------------------------------- */
+
+html {
+  font-family: var(--font-ui);
+  font-size: var(--t-body-size);
+  line-height: var(--t-body-lh);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  font-family: var(--font-ui);
+  font-size: var(--t-body-size);
+  line-height: var(--t-body-lh);
+  font-weight: var(--t-body-weight);
+  color: var(--text-primary);
+  /* Level 0 is opaque. Translucency is used in exactly one place: the sidebar. */
+  background: var(--bg-content);
+  overflow: hidden;   /* the shell scrolls its own regions */
+}
+
+/* Controls do not inherit font by default in WebKit. */
+button, input, select, textarea { font: inherit; color: inherit; }
+button { background: none; cursor: pointer; }
+a { color: var(--accent-text); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+::selection { background: var(--tint); }
+
+/* ---- Type scale utilities (§4) ------------------------------------------ */
+
+.t-title-1 { font-size: var(--t-title-1-size); line-height: var(--t-title-1-lh);
+             font-weight: var(--t-title-1-weight); letter-spacing: var(--t-title-1-track); }
+.t-title-2 { font-size: var(--t-title-2-size); line-height: var(--t-title-2-lh);
+             font-weight: var(--t-title-2-weight); letter-spacing: var(--t-title-2-track); }
+.t-head    { font-size: var(--t-head-size); line-height: var(--t-head-lh);
+             font-weight: var(--t-head-weight); letter-spacing: var(--t-head-track); }
+.t-body    { font-size: var(--t-body-size); line-height: var(--t-body-lh);
+             font-weight: var(--t-body-weight); letter-spacing: var(--t-body-track); }
+.t-body-em { font-size: var(--t-body-size); line-height: var(--t-body-lh);
+             font-weight: var(--t-body-em-weight); letter-spacing: var(--t-body-track); }
+.t-caption { font-size: var(--t-caption-size); line-height: var(--t-caption-lh);
+             font-weight: var(--t-caption-weight); letter-spacing: var(--t-caption-track); }
+/* Sidebar section headers — Title Case, NOT all-caps, NOT letterspaced wide. */
+.t-label   { font-size: var(--t-label-size); line-height: var(--t-label-lh);
+             font-weight: var(--t-label-weight); letter-spacing: var(--t-label-track);
+             color: var(--text-tertiary); }
+
+/* Body copy never letterspaced, never wider than 62ch (§4). */
+.measure { max-width: var(--measure); }
+
+/* ---- .tabular ----------------------------------------------------------- */
+/* Every number that CHANGES is set in mono with tabular figures, so digits
+   do not jitter as they update. This is the typographic half of the Meter. */
+
+.tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+.t-meter    { font-size: var(--t-meter-size); line-height: var(--t-meter-lh);
+              font-weight: var(--t-meter-weight); letter-spacing: var(--t-meter-track); }
+.t-meter-lg { font-size: var(--t-meter-lg-size); line-height: var(--t-meter-lg-lh);
+              font-weight: var(--t-meter-lg-weight); letter-spacing: var(--t-meter-lg-track); }
+
+/* ---- Focus (§6, §11) ---------------------------------------------------- */
+/* Visible amber ring on every interactive element. Never `outline: none`
+   without a replacement — this rule IS the replacement. */
+
+:focus { outline: none; }
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--r-control);
+  position: relative;
+  z-index: 1;
+}
+
+/* Elements that carry their own radius keep it under the ring. */
+.r-chip:focus-visible   { border-radius: var(--r-chip); }
+.r-card:focus-visible   { border-radius: var(--r-card); }
+.r-sheet:focus-visible  { border-radius: var(--r-sheet); }
+.r-round:focus-visible  { border-radius: 999px; }
+
+/* ---- Scrollbars --------------------------------------------------------- */
+
+* { scrollbar-width: thin; scrollbar-color: var(--gr-600) transparent; }
+
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background-color: var(--gr-600);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: var(--gr-500); }
+::-webkit-scrollbar-corner { background: transparent; }
+
+/* ---- Electron title-bar drag (§5) --------------------------------------- */
+
+.drag-region { -webkit-app-region: drag; }
+.no-drag     { -webkit-app-region: no-drag; }
+/* Anything interactive inside a drag region must opt out, or it cannot be
+   clicked — the window moves instead. */
+.drag-region button,
+.drag-region input,
+.drag-region select,
+.drag-region a,
+.drag-region [tabindex] { -webkit-app-region: no-drag; }
+
+/* ---- Screen-reader only ------------------------------------------------- */
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+}
+
+/* ---- Reduced motion (§7, §11) ------------------------------------------- */
+/* Transitions collapse to 1ms; the amber pulse becomes a static dot. */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---- Reduced transparency (§5, §11) ------------------------------------- */
+/* The sidebar is the only translucent surface; fall back to solid --gr-850. */
+
+@media (prefers-reduced-transparency: reduce) {
+  .vibrant {
+    background: var(--bg-sidebar-fallback) !important;
+    backdrop-filter: none !important;
+  }
+}

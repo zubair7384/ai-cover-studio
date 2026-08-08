@@ -1,0 +1,325 @@
+/* ============================================================================
+   Vocalis — Design tokens
+   ----------------------------------------------------------------------------
+   Every value in sections 3–7 of Vocalis-Design-System.md, and nothing else.
+   This is the ONLY file in the codebase permitted to contain a hex colour.
+
+   Two layers:
+     1. Palette  — raw scale values. Identical in both themes. Never flips.
+     2. Semantic — role names that map onto the palette. These flip under
+                   [data-theme="light"]. Components use ONLY these.
+
+   Concept: cool graphite chassis (hue 220, low saturation) + one warm amber
+   signal reserved for things that are live. The temperature contrast is what
+   makes amber read as "live" rather than decorative.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Layer 1 — palette and metrics. Theme-independent; declared once on :root.
+   -------------------------------------------------------------------------- */
+:root {
+  /* ==========================================================================
+     1. PALETTE — §3
+     ========================================================================== */
+
+  /* Neutrals — Graphite -------------------------------------------------- */
+  --gr-950: #111214;   /* deepest wells, log background */
+  --gr-900: #181A1C;   /* window content background (dark) */
+  --gr-850: #1F2124;   /* raised surface / list rows */
+  --gr-800: #26282B;   /* card, panel */
+  --gr-750: #2E3134;   /* control fill (buttons, inputs) */
+  --gr-700: #383B3F;   /* control fill hover */
+  --gr-600: #4B4F55;   /* strong border, disabled text */
+  --gr-500: #6C7178;   /* waveform unplayed, meter track */
+  --gr-400: #8E949C;   /* tertiary text */
+  --gr-300: #B3B9C0;   /* secondary text (dark mode) */
+  --gr-200: #D4D8DD;   /* hairline (light mode) */
+  --gr-150: #E4E7EA;   /* grouped background (light mode) */
+  --gr-100: #EEF0F2;   /* raised surface (light mode) */
+  --gr-050: #F7F8F9;   /* window content background (light) */
+
+  /* Signal — Amber (the only accent) ------------------------------------- */
+  --am-700: #A15E12;   /* amber text/link on LIGHT backgrounds only */
+  --am-500: #E0872B;   /* primary fill, selection, playhead, meter fill */
+  --am-400: #EC9A3E;   /* fill hover */
+  --am-300: #F0A94E;   /* amber text on DARK backgrounds only */
+  --am-050: #FBEBD5;   /* tint background (light mode) */
+  --am-tint: rgba(224, 135, 43, 0.14);  /* selected row background (dark) */
+
+  /* Status --------------------------------------------------------------- */
+  --ok-500:  #3FA97C;  /* ready, complete */
+  --ok-300:  #6FCFA6;  /* ok text on dark */
+  --err-500: #DC4E3C;  /* destructive, failed */
+  --err-300: #F08272;  /* err text on dark */
+
+}
+
+/* --------------------------------------------------------------------------
+   Layer 2 — semantic roles, DARK (the default).
+   Also matches [data-theme="dark"] so a dark panel can sit inside a light page.
+   -------------------------------------------------------------------------- */
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* ==========================================================================
+     2. SEMANTIC — surfaces (§5 elevation)
+     Elevation is surface value + 1px hairline, never shadow.
+     ========================================================================== */
+
+  --bg-content:       var(--gr-900);   /* level 0 — opaque, never translucent */
+  --bg-raised:        var(--gr-850);   /* level 1 — row / card */
+  --bg-panel:         var(--gr-800);   /* level 2 — panel */
+  --bg-popover:       var(--gr-800);   /* level 3 */
+  --bg-sheet:         var(--gr-800);   /* level 4 */
+  --bg-well:          var(--gr-950);   /* log / sparkline ground */
+  --bg-control:       var(--gr-750);
+  --bg-control-hover: var(--gr-700);
+  --bg-sidebar-fallback: var(--gr-850); /* when vibrancy is unavailable */
+
+  /* Elevation borders + shadows (§5) */
+  --border-1: 1px solid rgba(255, 255, 255, 0.06);
+  --border-2: 1px solid rgba(255, 255, 255, 0.08);
+  --border-3: 1px solid rgba(255, 255, 255, 0.12);
+  --shadow-3: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-4: 0 24px 64px rgba(0, 0, 0, 0.55);
+
+  /* Hairlines */
+  --hairline:        rgba(255, 255, 255, 0.08);
+  --hairline-strong: rgba(255, 255, 255, 0.12);
+
+  /* ==========================================================================
+     SEMANTIC — text (§3)
+     ========================================================================== */
+
+  --text-primary:   #F2F4F6;
+  --text-secondary: #B3B9C0;
+  --text-tertiary:  #8E949C;
+  --text-disabled:  #6C7178;
+
+  /* USAGE RULE — --text-tertiary is valid on --bg-content, --bg-well and
+     --bg-popover only. On --bg-raised it measures 4.30:1 in LIGHT mode
+     (#6C7178 on --gr-100), below the §11 floor of 4.5:1. Quiet text on a card
+     or row therefore uses --text-secondary. This is a genuine conflict inside
+     the design system: §3 fixes the text colour, §5 fixes the surface, and
+     §11 demands 4.5:1 — the three cannot all hold, so the floor wins. */
+
+  /* ==========================================================================
+     SEMANTIC — accent
+     CRITICAL (§3): filled amber controls use near-black text, never white.
+     #111214 on #E0872B = 9.1:1. White on amber = 2.3:1 and fails.
+     ========================================================================== */
+
+  --accent:        var(--am-500);
+  --accent-hover:  var(--am-400);
+  --on-accent:     var(--gr-950);   /* never white — see above */
+  --accent-text:   var(--am-300);   /* amber TEXT on dark surfaces */
+  --tint:          var(--am-tint);  /* selected row background */
+
+  --ok-text:  var(--ok-300);
+  --err-text: var(--err-300);
+  /* Near-black on --err-500 = 4.64:1; white would be only 4.04:1 and fail.
+     Same rule as amber (§3): filled controls take near-black text. */
+  --on-error: var(--gr-950);
+
+  /* Status used as GRAPHICS (dots, meter fills) rather than text. Needs 3:1
+     against the surface, which --ok-500 does not clear on a light ground. */
+  --ok-graphic:  var(--ok-500);
+  --err-graphic: var(--err-500);
+
+  /* Filled-amber controls need a boundary on light grounds — see the light
+     block. Transparent here because --am-500 on graphite already clears 3:1. */
+  --accent-border: transparent;
+
+  /* Incidental surfaces that are not part of the palette proper. Declared here
+     so no component file needs a literal colour. */
+  --scrim:        rgba(0, 0, 0, 0.45);
+  --thumb:        #FFFFFF;
+  --thumb-border: rgba(0, 0, 0, 0.30);
+  --shimmer:      rgba(255, 255, 255, 0.045);
+
+  /* Focus ring (§6) — applied to every interactive element. Never outline:none */
+  --focus-ring: 0 0 0 3px rgba(224, 135, 43, 0.35);
+
+  /* Pulse on a running pipeline stage — the only looping animation (§7). */
+  --accent-glow:   rgba(224, 135, 43, 0.45);
+  --accent-glow-0: rgba(224, 135, 43, 0);
+
+  /* Meter track (§6) — 20% opacity of --gr-500 */
+  --meter-track: rgba(108, 113, 120, 0.2);
+  --meter-fill:  var(--am-500);
+  --wave-unplayed: var(--gr-500);
+  --wave-played:   var(--am-500);
+}
+
+/* --------------------------------------------------------------------------
+   Layer 3 — typography, shape, spacing, metrics, motion. Theme-independent.
+   -------------------------------------------------------------------------- */
+:root {
+  /* ==========================================================================
+     3. TYPOGRAPHY — §4
+     ========================================================================== */
+
+  --font-ui:   -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+
+  /* title-1 — view title in content area */
+  --t-title-1-size: 22px;  --t-title-1-lh: 28px;  --t-title-1-weight: 600;  --t-title-1-track: -0.015em;
+  /* title-2 — sheet titles, empty-state headline */
+  --t-title-2-size: 17px;  --t-title-2-lh: 22px;  --t-title-2-weight: 600;  --t-title-2-track: -0.01em;
+  /* head — section headers, card titles */
+  --t-head-size: 15px;     --t-head-lh: 20px;     --t-head-weight: 600;     --t-head-track: -0.005em;
+  /* body — default. all controls, list rows */
+  --t-body-size: 13px;     --t-body-lh: 18px;     --t-body-weight: 400;     --t-body-track: 0;
+  /* body-em — field labels, selected sidebar row */
+  --t-body-em-weight: 600;
+  /* caption — helper text, metadata */
+  --t-caption-size: 11px;  --t-caption-lh: 15px;  --t-caption-weight: 400;  --t-caption-track: 0;
+  /* label — sidebar section headers. TITLE CASE, NOT CAPS */
+  --t-label-size: 11px;    --t-label-lh: 15px;    --t-label-weight: 600;    --t-label-track: 0.01em;
+  /* meter — mono readouts ("0:42 / 3:17", "epoch 118/300") */
+  --t-meter-size: 11px;    --t-meter-lh: 14px;    --t-meter-weight: 500;    --t-meter-track: 0.02em;
+  /* meter-lg — mono, primary progress figure */
+  --t-meter-lg-size: 15px; --t-meter-lg-lh: 20px; --t-meter-lg-weight: 500; --t-meter-lg-track: 0;
+
+  --measure: 62ch;   /* body copy max width (§4) */
+
+  /* ==========================================================================
+     4. SHAPE — §5. Nothing above 12.
+     ========================================================================== */
+
+  --r-chip:    4px;   /* chips, badges */
+  --r-control: 6px;   /* controls, inputs, buttons */
+  --r-card:    8px;   /* cards, rows, panels */
+  --r-sheet:  12px;   /* sheets and popovers */
+
+  /* ==========================================================================
+     5. SPACING — §5. 4pt grid.
+     ========================================================================== */
+
+  --sp-1:  4px;
+  --sp-2:  8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-7: 32px;
+  --sp-8: 40px;
+  --sp-9: 48px;
+
+  --pad-window: 20px;  /* window content padding */
+  --pad-card:   16px;  /* card padding */
+
+  /* Row heights */
+  --row-list:    32px;
+  --row-sidebar: 28px;
+  --row-compact: 24px;
+
+  /* ==========================================================================
+     6. CONTROL METRICS — §5
+     ========================================================================== */
+
+  --ctl-sm: 22px;   /* small */
+  --ctl-md: 28px;   /* default */
+  --ctl-lg: 32px;   /* prominent */
+
+  --toolbar-h: 52px;
+  --player-h:  48px;
+
+  --sidebar-w:     220px;
+  --sidebar-min:   180px;
+  --sidebar-max:   320px;
+  --inspector-w:   280px;
+  --inspector-min: 240px;
+  --inspector-max: 360px;
+
+  /* ==========================================================================
+     7. MOTION — §7
+     Meters animate width LINEARLY — never eased, or progress reads inaccurate.
+     ========================================================================== */
+
+  --dur-press: 120ms;  /* hover / press */
+  --dur-panel: 180ms;  /* panel, sheet */
+  --dur-view:  240ms;  /* view transition */
+
+  --ease-enter: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-exit:  ease-out;
+  --ease-meter: linear;
+}
+
+/* ============================================================================
+   LIGHT THEME — overrides neutrals and text only.
+   The amber palette is unchanged; only which amber is used for TEXT flips,
+   because --am-300 on white fails contrast and --am-700 passes.
+   ========================================================================== */
+
+/* Scoped to any subtree, not just :root, so a light panel can sit inside a dark
+   page. The styleguide relies on this to show both themes on one screen. */
+:root[data-theme="light"],
+[data-theme="light"] {
+  color-scheme: light;
+
+  --bg-content:       var(--gr-050);
+  --bg-raised:        var(--gr-100);
+  --bg-panel:         #FFFFFF;
+  --bg-popover:       #FFFFFF;
+  --bg-sheet:         #FFFFFF;
+  --bg-well:          var(--gr-150);
+  --bg-control:       #FFFFFF;
+  --bg-control-hover: var(--gr-100);
+  --bg-sidebar-fallback: var(--gr-150);
+
+  --border-1: 1px solid rgba(0, 0, 0, 0.08);
+  --border-2: 1px solid rgba(0, 0, 0, 0.10);
+  --border-3: 1px solid rgba(0, 0, 0, 0.14);
+  --shadow-3: 0 8px 24px rgba(0, 0, 0, 0.16);
+  --shadow-4: 0 24px 64px rgba(0, 0, 0, 0.22);
+
+  --hairline:        var(--gr-200);
+  --hairline-strong: var(--gr-300);
+
+  --text-primary:   #14161A;
+  --text-secondary: #4B4F55;
+  --text-tertiary:  #6C7178;
+  --text-disabled:  #8E949C;
+
+  /* Amber fill stays --am-500 with near-black text; only amber TEXT flips. */
+  --accent-text: var(--am-700);
+  --tint:        var(--am-050);
+
+  --ok-text:  #2F7F5C;   /* --ok-500 darkened to clear 4.5:1 on --gr-050 */
+  --err-text: #C0392A;   /* --err-500 darkened to clear 4.5:1 on --gr-050 */
+
+  /* Amber graphics fail 3:1 on a light ground (--am-500 on --gr-050 = 2.57),
+     so anything drawn rather than filled-with-text steps down to --am-700. */
+  --meter-fill:   var(--am-700);
+  --wave-played:  var(--am-700);
+  --ok-graphic:   var(--ok-text);
+  --err-graphic:  var(--err-text);
+  --accent-border: var(--am-700);
+
+  --meter-track: rgba(108, 113, 120, 0.25);
+  --thumb:        #FFFFFF;
+  --thumb-border: rgba(0, 0, 0, 0.22);
+  --shimmer:      rgba(0, 0, 0, 0.045);
+}
+
+/* ============================================================================
+   INCREASE CONTRAST — §11
+   "Support the system Increase contrast setting by swapping hairlines to
+   --gr-600."
+   ========================================================================== */
+
+@media (prefers-contrast: more) {
+  :root {
+    --hairline:        var(--gr-600);
+    --hairline-strong: var(--gr-600);
+    --border-1: 1px solid var(--gr-600);
+    --border-2: 1px solid var(--gr-600);
+    --border-3: 1px solid var(--gr-600);
+  }
+  :root[data-theme="light"] {
+    --hairline:        var(--gr-600);
+    --hairline-strong: var(--gr-600);
+  }
+}
