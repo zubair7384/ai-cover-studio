@@ -9,6 +9,7 @@ env/
 
 .separator_models/
 Applio/
+downloads/
 outputs/
 training_datasets/
 voice_models/

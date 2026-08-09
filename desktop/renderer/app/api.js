@@ -49,6 +49,10 @@ export const api = {
 
   storage: () => json("/api/storage"),
   deleteAllCovers: (trashFiles = true) => post("/api/outputs/delete-all", { trashFiles }),
+  clearDownloads: () => post("/api/downloads/clear"),
+
+  /** Resolve a pasted link to a local audio file. Returns a job id. */
+  fetchUrl: (url) => post("/api/fetch-url", { url }),
 
   voices: () => json("/api/models/meta"),
   previewUrl: (name) => `${base}/api/models/preview/${encodeURIComponent(name)}`,
@@ -122,6 +126,12 @@ export function runJob(jobId, { onProgress, onLog } = {}) {
       else if (msg.type === "log") onLog?.(msg.line);
       else if (msg.type === "done") { source.close(); resolve(msg.result || {}); }
       else if (msg.type === "error") { source.close(); reject(new Error(msg.message)); }
+      // A cancelled job closes its stream with no result. Without this the
+      // stream simply ends and the caller is told it lost the engine.
+      else if (msg.type === "cancelled") {
+        source.close();
+        reject(Object.assign(new Error("Cancelled."), { cancelled: true }));
+      }
     };
 
     // A dropped stream must not leave the caller hanging forever.

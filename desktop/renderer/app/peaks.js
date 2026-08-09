@@ -66,7 +66,9 @@ function extract(buffer, buckets = BUCKETS) {
 export const cacheKey = (item) => `${item.id}:${item.size}:${Math.round(item.when)}`;
 
 /**
- * @param {{id:string, size:number, when:number, src:string}} item
+ * @param {{id:string, size:number, when:number, src?:string, read?:Function}} item
+ *   `src` is fetched; `read` is an alternative byte source for files that live
+ *   outside the app:// origin (a chosen song, say) and arrive over IPC.
  * @returns {Promise<{peaks:number[], duration:number}>}
  */
 export function getPeaks(item) {
@@ -83,8 +85,9 @@ export function getPeaks(item) {
     }
 
     const value = await schedule(async () => {
-      const res = await fetch(item.src);
-      const bytes = await res.arrayBuffer();
+      const bytes = item.read
+        ? await item.read()
+        : await (await fetch(item.src)).arrayBuffer();
       const audio = await audioContext().decodeAudioData(bytes);
       return { peaks: extract(audio), duration: audio.duration };
     });

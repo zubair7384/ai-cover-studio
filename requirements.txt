@@ -9,3 +9,4 @@ rvc-python
 audio-separator[cpu]        # use audio-separator[gpu] on NVIDIA machines
 pedalboard
 pydub
+yt-dlp                      # "paste a link" input; keep it updated

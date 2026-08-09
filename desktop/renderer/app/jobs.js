@@ -55,7 +55,7 @@ function syncSideEffects() {
  * Start a cover run.
  * @returns {Promise<string>} the job id
  */
-export async function startCover({ songPath, songName, voiceId, params }) {
+export async function startCover({ songPath, songName, voiceId, params, trim }) {
   const { job_id } = await fetch(`${origin()}/api/convert`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -66,6 +66,9 @@ export async function startCover({ songPath, songName, voiceId, params }) {
       index_rate: params.voiceCharacter,
       vocal_gain_db: params.vocalGain ?? 0,
       output_format: params.outputFormat || "mp3",
+      // Omitted entirely for a whole-song run, so the engine can tell "no trim"
+      // from "a trim that happens to start at zero".
+      ...(trim ? { trim_start: trim.start, trim_end: trim.end } : {}),
     }),
   }).then(async (res) => {
     if (!res.ok) {

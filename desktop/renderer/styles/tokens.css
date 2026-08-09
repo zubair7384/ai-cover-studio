@@ -229,6 +229,12 @@
   --toolbar-h: 52px;
   --player-h:  48px;
 
+  /* Horizontal inset for sidebar rows. Tighter than --pad-window: the rows are
+     short labels, so matching the content gutter left them stranded in the
+     middle of the column with no room to grow. The window loses the exact
+     left/right symmetry that pairing bought, which is the intended trade. */
+  --sidebar-inset: 12px;
+
   --sidebar-w:     220px;
   --sidebar-min:   180px;
   --sidebar-max:   320px;

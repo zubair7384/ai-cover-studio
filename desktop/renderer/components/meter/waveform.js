@@ -22,6 +22,12 @@ import { Readout } from "../primitives/display.js";
  * @param {Function} [o.onSeek]      (fraction) => void, called live while dragging
  * @param {Function} [o.onSeekEnd]   (fraction) => void, called on release
  * @param {boolean} [o.disabled]     render only, no scrubbing
+ * @param {{start:number, end:number}} [o.selection]  trim range, 0..1 each. Bars
+ *   outside it dim and two amber handles appear. Omit for a plain scrubber.
+ * @param {Function} [o.onSelect]    (start, end) => void, live while dragging
+ * @param {Function} [o.onSelectEnd] (start, end) => void, on release
+ * @param {Function} [o.formatValue] (fraction) => string, for the handles'
+ *   aria-valuetext — a screen reader should hear "1:12", not "34%".
  * @param {string} o.ariaLabel
  */
 export function Waveform({
@@ -34,16 +40,24 @@ export function Waveform({
   onSeek,
   onSeekEnd,
   disabled = false,
+  selection = null,
+  onSelect,
+  onSelectEnd,
+  formatValue,
   ariaLabel = "Waveform",
 } = {}) {
   const canvas = el("canvas");
+
+  // With a selection the box is a container for two handle sliders, so it stops
+  // being a slider itself — one element cannot carry two values.
+  const trimming = Boolean(selection);
   const box = el("div", {
     class: "waveform",
     style: { height: `${height}px` },
-    role: disabled ? "img" : "slider",
-    tabindex: disabled ? undefined : "0",
+    role: trimming ? "group" : (disabled ? "img" : "slider"),
+    tabindex: (disabled || trimming) ? undefined : "0",
     "aria-label": ariaLabel,
-    ...(disabled ? {} : {
+    ...((disabled || trimming) ? {} : {
       "aria-valuemin": "0",
       "aria-valuemax": "100",
       "aria-valuenow": String(Math.round(progress * 100)),
@@ -57,6 +71,9 @@ export function Waveform({
 
   let data = normalise(peaks);
   let pos = clamp01(progress);
+  let range = trimming
+    ? { start: clamp01(selection.start), end: clamp01(selection.end) }
+    : null;
   const ctx = canvas.getContext("2d");
 
   /* ---- painting -------------------------------------------------------- */
@@ -96,11 +113,18 @@ export function Waveform({
       const x = i * step;
       const y = mid - barH / 2;
 
+      // Outside the trim range the audio is being discarded, so it recedes
+      // rather than changing colour — one shape, two weights.
+      if (range) {
+        const at = (i + 0.5) / bars;
+        ctx.globalAlpha = at >= range.start && at <= range.end ? 1 : 0.25;
+      }
       ctx.fillStyle = i < playedBars ? c.played : c.unplayed;
       ctx.beginPath();
       ctx.roundRect(x, y, barWidth, barH, 1);
       ctx.fill();
     }
+    ctx.globalAlpha = 1;
 
     // 1px amber playhead
     if (pos > 0 && pos < 1) {
@@ -124,6 +148,90 @@ export function Waveform({
   };
 
   const offs = [];
+
+  /* ---- trim handles ------------------------------------------------------ */
+  // Two real focusable elements rather than hit-testing the canvas: the trim
+  // points have to be reachable by keyboard, and a canvas cannot be.
+
+  const handles = {};
+
+  if (trimming) {
+    const MIN_SPAN = 0.01;   // never let the two handles cross or coincide
+
+    const applyRange = (next, notify, done) => {
+      range = {
+        start: clamp01(Math.min(next.start, next.end - MIN_SPAN)),
+        end: clamp01(Math.max(next.end, next.start + MIN_SPAN)),
+      };
+      placeHandles();
+      draw();
+      if (notify) onSelect?.(range.start, range.end);
+      if (done) onSelectEnd?.(range.start, range.end);
+    };
+
+    const makeHandle = (which, label) => {
+      const node = el("div", {
+        class: `waveform__handle waveform__handle--${which}`,
+        role: "slider",
+        tabindex: "0",
+        "aria-label": label,
+        "aria-valuemin": "0",
+        "aria-valuemax": "100",
+      }, el("span", { class: "waveform__grip" }));
+
+      offs.push(on(node, "pointerdown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();       // don't scrub the track while trimming it
+        node.setPointerCapture(e.pointerId);
+        node.dataset.dragging = "true";
+      }));
+
+      offs.push(on(node, "pointermove", (e) => {
+        if (!node.dataset.dragging) return;
+        e.stopPropagation();
+        applyRange({ ...range, [which]: fractionFromEvent(e) }, true, false);
+      }));
+
+      const end = (e) => {
+        if (!node.dataset.dragging) return;
+        delete node.dataset.dragging;
+        try { node.releasePointerCapture(e.pointerId); } catch { /* already released */ }
+        onSelectEnd?.(range.start, range.end);
+      };
+      offs.push(on(node, "pointerup", end));
+      offs.push(on(node, "pointercancel", end));
+
+      offs.push(on(node, "keydown", (e) => {
+        const step = e.shiftKey ? 0.05 : 0.005;
+        let next = null;
+        if (e.key === "ArrowRight") next = range[which] + step;
+        else if (e.key === "ArrowLeft") next = range[which] - step;
+        else if (e.key === "Home") next = 0;
+        else if (e.key === "End") next = 1;
+        if (next === null) return;
+        e.preventDefault();
+        e.stopPropagation();
+        applyRange({ ...range, [which]: next }, true, true);
+      }));
+
+      box.appendChild(node);
+      return node;
+    };
+
+    handles.start = makeHandle("start", "Trim start");
+    handles.end = makeHandle("end", "Trim end");
+    node.setSelection = (start, end) => applyRange({ start, end }, false, false);
+  }
+
+  function placeHandles() {
+    if (!range) return;
+    for (const [which, node] of Object.entries(handles)) {
+      const value = range[which];
+      node.style.left = `${value * 100}%`;
+      node.setAttribute("aria-valuenow", String(Math.round(value * 100)));
+      if (formatValue) node.setAttribute("aria-valuetext", formatValue(value));
+    }
+  }
 
   if (!disabled) {
     let dragging = false;
@@ -172,6 +280,7 @@ export function Waveform({
     attributes: true, attributeFilter: ["data-theme"],
   });
 
+  placeHandles();
   requestAnimationFrame(draw);
 
   node.setProgress = (p) => setPos(p, false);

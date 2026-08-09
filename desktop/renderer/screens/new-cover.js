@@ -22,7 +22,7 @@ import { Waveform, Pipeline, COVER_STAGES } from "../components/meter/index.js";
 import { MeterBar } from "../components/meter/meter-bar.js";
 import { getState, set, subscribe } from "../app/store.js";
 import { exitFlow, setFlowDirtyCheck } from "../app/router.js";
-import { api, mediaUrl } from "../app/api.js";
+import { api, mediaUrl, runJob } from "../app/api.js";
 import { startCover, cancelJob, getJob, COVER_STAGE_IDS } from "../app/jobs.js";
 import { initials } from "../app/profile.js";
 import * as fmt from "../app/format.js";
@@ -42,6 +42,7 @@ const FORMATS = [
 ];
 
 const AUDIO_RE = /\.(mp3|wav|flac|m4a|ogg|aiff?|aac)$/i;
+const URL_RE = /^https?:\/\/\S+$/i;
 
 export function NewCoverFlow() {
   /* ---- state ----------------------------------------------------------- */
@@ -49,15 +50,21 @@ export function NewCoverFlow() {
   const draft = getState().coverDraft || {};
   const params = { ...DEFAULTS, ...draft };
 
-  let song = null;          // { path, name, durationSec, sampleRate }
+  let song = null;          // { path, name, durationSec, sampleRate, sourceUrl }
   let voiceId = draft.voiceId || null;
   let jobId = null;
+  let fetchJobId = null;    // a link fetch in flight
+  let fetchError = null;
+  let trim = null;          // { start, end } in seconds; null = the whole song
+  let trimOpen = false;
+  let sourcePeaks = null;   // { peaks, duration } for the chosen song
+  let sourceBlobUrl = null; // decoded once, for trim preview playback
 
   const voices = () => getState().voices;
   const currentVoice = () => voices().find((v) => v.name === voiceId) || null;
 
   // Warn before discarding a flow that has real work in it.
-  setFlowDirtyCheck(() => Boolean(song) && !jobId);
+  setFlowDirtyCheck(() => (Boolean(song) || Boolean(fetchJobId)) && !jobId);
 
   /* ---- 1. SONG --------------------------------------------------------- */
 
@@ -65,16 +72,142 @@ export function NewCoverFlow() {
 
   async function chooseSong() {
     const path = await window.vocalis.pickAudio("Choose a song");
-    if (path) setSong(path);
+    if (path) setSong({ path, name: path.split("/").pop() });
   }
 
-  function setSong(path) {
-    song = { path, name: path.split("/").pop() };
+  function setSong(next) {
+    song = next;
+    // Every song starts untrimmed, and the old song's shape must not linger
+    // behind the new one's name.
+    trim = null;
+    trimOpen = false;
+    sourcePeaks = null;
+    if (sourceBlobUrl) { URL.revokeObjectURL(sourceBlobUrl); sourceBlobUrl = null; }
     paintSong();
     paintGenerate();
+    if (song) loadSourcePeaks(song.path);
+  }
+
+  /**
+   * Decode the chosen song for the trim view. The file lives outside the app://
+   * origin, so its bytes come over IPC rather than through fetch.
+   */
+  async function loadSourcePeaks(path) {
+    const { getPeaks } = await import("../app/peaks.js");
+    try {
+      const data = await getPeaks({
+        id: path, size: 0, when: 0,
+        read: () => window.vocalis.readAudio(path),
+      });
+      if (!song || song.path !== path) return;   // a later song won the race
+      sourcePeaks = data;
+      if (!song.durationSec) song.durationSec = data.duration;
+      paintSong();
+    } catch {
+      // No peaks means no trim view; the flow still works on the whole song.
+    }
+  }
+
+  const songDuration = () =>
+    sourcePeaks?.duration || song?.durationSec || 0;
+
+  /** The trim as the engine wants it, or null when the whole song is in play. */
+  function effectiveTrim() {
+    const total = songDuration();
+    if (!trim || !total) return null;
+    const start = Math.max(0, trim.start);
+    const end = Math.min(total, trim.end);
+    if (end - start < 1) return null;
+    // Within a quarter-second of the full track is not a trim, it is noise.
+    if (start < 0.25 && end > total - 0.25) return null;
+    return { start, end };
+  }
+
+  /* Link input.
+   *
+   * The fetch is a job on the server, but it is deliberately NOT registered in
+   * the Activity list: it is a step of filling in the Song field, not a run to
+   * navigate away from. Its nodes are built once and mutated in place, so
+   * progress ticks can't steal focus out of the input.
+   */
+  const linkInput = el("input", {
+    type: "url",
+    class: "input linkrow__input",
+    placeholder: "https://www.youtube.com/watch?v=…",
+    "aria-label": "Song link",
+    spellcheck: "false",
+    oninput: () => { fetchError = null; paintLink(); },
+    onkeydown: (e) => { if (e.key === "Enter") { e.preventDefault(); fetchLink(); } },
+  });
+
+  const linkBtn = Button({ label: "Fetch", onClick: () => fetchLink() });
+  const linkCancel = Button({
+    label: "Cancel", variant: "tertiary",
+    onClick: () => { if (fetchJobId) cancelJob(fetchJobId); },
+  });
+  const linkMeter = MeterBar({ value: 0, ariaLabel: "Download progress" });
+  const linkStatus = el("div", { class: "t-caption linkrow__status" }, "");
+
+  const linkRow = el("div", { class: "linkrow" },
+    el("div", { class: "linkrow__field" }, linkInput, linkBtn, linkCancel),
+    linkMeter,
+    linkStatus,
+  );
+
+  function paintLink(progress = 0, note = "") {
+    const busy = Boolean(fetchJobId);
+    linkInput.disabled = busy;
+    linkBtn.disabled = busy || !linkInput.value.trim();
+    linkBtn.hidden = busy;
+    linkCancel.hidden = !busy;
+    linkMeter.hidden = !busy;
+    linkMeter.setValue(progress);
+    linkStatus.textContent = fetchError || (busy ? note : "");
+    linkStatus.classList.toggle("linkrow__status--error", Boolean(fetchError));
+  }
+
+  async function fetchLink(url = linkInput.value.trim()) {
+    if (!url || fetchJobId) return;
+    linkInput.value = url;
+    fetchError = null;
+    try {
+      const { job_id } = await api.fetchUrl(url);
+      fetchJobId = job_id;
+      paintLink(0, "Reading the link…");
+      paintGenerate();
+
+      const result = await runJob(job_id, {
+        onProgress: (frac, step, note) =>
+          paintLink(frac, note ? `${step} · ${note}` : step),
+      });
+
+      fetchJobId = null;
+      linkInput.value = "";
+      // A file chosen while the download ran is the later, more explicit
+      // choice, so it wins. The download stays in the cache either way.
+      if (song) return paintGenerate();
+      setSong({
+        path: result.path,
+        name: result.title || String(result.path).split("/").pop(),
+        durationSec: result.durationSec || null,
+        sourceUrl: result.webpageUrl || url,
+      });
+    } catch (err) {
+      fetchJobId = null;
+      fetchError = err.cancelled ? "Fetch cancelled." : err.message;
+      paintLink();
+      paintGenerate();
+    }
+  }
+
+  function sourceHost(url) {
+    try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return "link"; }
   }
 
   function paintSong() {
+    // The trim panel owns a decoded <audio> and a canvas observer, so it has to
+    // be told before its nodes are thrown away.
+    songSection.querySelector(".trimpanel")?.destroy?.();
     songSection.innerHTML = "";
 
     if (!song) {
@@ -89,26 +222,157 @@ export function NewCoverFlow() {
         el("div", { class: "t-caption dropzone__hint" }, "MP3, WAV, FLAC or M4A"),
       );
       songSection.appendChild(zone);
+      songSection.appendChild(linkRow);
+      paintLink();
       return;
     }
 
     // Collapsed to a 72px row once a file is in.
     const wave = Waveform({
-      peaks: [], progress: 0, height: 28, disabled: true, ariaLabel: "",
+      peaks: sourcePeaks?.peaks || [], progress: 0, height: 28,
+      disabled: true, ariaLabel: "",
     });
     wave.style.maxWidth = "180px";
+
+    const cut = effectiveTrim();
 
     songSection.appendChild(el("div", { class: "songrow" },
       wave,
       el("div", { class: "songrow__main" },
-        el("div", { class: "t-body-em" }, song.name),
+        // Video titles run far longer than filenames, and the row is a fixed
+        // 72px — so it truncates, with the full title on hover.
+        el("div", { class: "t-body-em songrow__title", title: song.name }, song.name),
         el("div", { class: "t-caption songrow__meta" },
           [song.durationSec ? fmt.duration(song.durationSec) : null,
-           song.sampleRate ? `${Math.round(song.sampleRate / 1000)} kHz` : null]
+           song.sampleRate ? `${Math.round(song.sampleRate / 1000)} kHz` : null,
+           song.sourceUrl ? sourceHost(song.sourceUrl) : null,
+           cut ? `trimmed to ${fmt.duration(cut.end - cut.start)}` : null]
             .filter(Boolean).join(" · ") || "Ready"),
       ),
+      // Only offered once the shape is known — a trim view with no waveform
+      // would be a slider over nothing.
+      sourcePeaks
+        ? Button({
+            label: trimOpen ? "Close trim" : (cut ? "Edit trim" : "Trim"),
+            variant: "tertiary", size: "sm",
+            onClick: () => { trimOpen = !trimOpen; paintSong(); },
+          })
+        : null,
       Button({ label: "Replace", variant: "tertiary", size: "sm", onClick: chooseSong }),
+      Button({
+        label: "Use a link", variant: "tertiary", size: "sm",
+        onClick: () => { setSong(null); linkInput.focus(); },
+      }),
     ));
+
+    if (trimOpen && sourcePeaks) songSection.appendChild(buildTrimPanel());
+  }
+
+  /* Trim panel.
+   *
+   * Sits under the song row rather than in the Inspector: it is an edit to the
+   * input, not a parameter of the run, and it needs the full content width to
+   * be draggable with any precision.
+   */
+  function buildTrimPanel() {
+    const total = songDuration();
+    const range = trim || { start: 0, end: total };
+    const asTime = (fraction) => fmt.duration(fraction * total);
+
+    let preview = null;
+    let stopAt = null;
+
+    const readout = el("div", { class: "t-meter tabular trimpanel__readout" }, "");
+    const resetBtn = Button({
+      label: "Whole song", variant: "tertiary", size: "sm",
+      disabled: !effectiveTrim(),
+      onClick: () => {
+        trim = null;
+        preview?.pause();
+        paintSong();
+        paintGenerate();
+      },
+    });
+    const paintReadout = () => {
+      readout.textContent =
+        `${fmt.duration(range.start)} – ${fmt.duration(range.end)}`
+        + `  ·  ${fmt.duration(range.end - range.start)} selected`;
+    };
+
+    const wave = Waveform({
+      peaks: sourcePeaks.peaks,
+      height: 56,
+      ariaLabel: "Scrub the song",
+      selection: { start: range.start / total, end: range.end / total },
+      formatValue: asTime,
+      onSelect: (start, end) => {
+        range.start = start * total;
+        range.end = end * total;
+        paintReadout();
+      },
+      onSelectEnd: () => {
+        trim = { start: range.start, end: range.end };
+        paintGenerate();
+        resetBtn.disabled = !effectiveTrim();
+        // The collapsed row's summary is now stale, but repainting the whole
+        // section would tear down this panel mid-interaction.
+        const meta = songSection.querySelector(".songrow__meta");
+        const cut = effectiveTrim();
+        if (meta && cut) {
+          meta.textContent = meta.textContent.replace(/ · trimmed to .*$/, "")
+            + ` · trimmed to ${fmt.duration(cut.end - cut.start)}`;
+        }
+      },
+      onSeek: (fraction) => { if (preview) preview.currentTime = fraction * total; },
+    });
+
+    const playBtn = IconButton({
+      icon: "play", label: "Play the selection",
+      onClick: async () => {
+        if (preview && !preview.paused) { preview.pause(); return; }
+        if (!preview) {
+          const url = await sourceAudioUrl();
+          if (!url) return;                 // unreadable file — nothing to play
+          preview = new Audio(url);
+          preview.addEventListener("timeupdate", () => {
+            wave.setProgress(preview.currentTime / total);
+            if (stopAt != null && preview.currentTime >= stopAt) preview.pause();
+          });
+        }
+        // Always from the head of the selection: the point is to audition the
+        // part that will actually be converted.
+        preview.currentTime = range.start;
+        stopAt = range.end;
+        preview.play().catch(() => {});
+      },
+    });
+
+    paintReadout();
+
+    const panel = el("div", { class: "trimpanel" },
+      wave,
+      el("div", { class: "trimpanel__foot" },
+        playBtn,
+        readout,
+        resetBtn,
+        Button({
+          label: "Done", variant: "secondary", size: "sm",
+          onClick: () => { trimOpen = false; preview?.pause(); paintSong(); },
+        }),
+      ),
+    );
+
+    panel.destroy = () => { preview?.pause(); wave.destroy?.(); };
+    return panel;
+  }
+
+  /** One decode of the source file, shared by trim preview and A/B compare. */
+  async function sourceAudioUrl() {
+    if (sourceBlobUrl) return sourceBlobUrl;
+    const bytes = await window.vocalis.readAudio(song?.path);
+    if (!bytes) return null;
+    sourceBlobUrl = URL.createObjectURL(new Blob([bytes]));
+    return sourceBlobUrl;
   }
 
   /* ---- 2. VOICE -------------------------------------------------------- */
@@ -260,15 +524,19 @@ export function NewCoverFlow() {
       ariaLabel: "Scrub the finished cover",
       onSeek: (f) => { if (audio.duration) audio.currentTime = f * audio.duration; },
     });
+    // Bound to this panel's own waveform, not the outer `resultWave`: "Adjust
+    // and run again" nulls that while this <audio> is still ticking, and the
+    // handler then threw on every frame of playback.
+    const wave = resultWave;
     audio.addEventListener("timeupdate", () => {
       if (!audio.duration) return;
-      resultWave.setProgress(audio.currentTime / audio.duration);
-      resultWave.setReadout(fmt.position(audio.currentTime, audio.duration));
+      wave.setProgress(audio.currentTime / audio.duration);
+      wave.setReadout(fmt.position(audio.currentTime, audio.duration));
     });
 
     import("../app/peaks.js").then(({ getPeaks }) =>
       getPeaks({ id: name, size: 0, when: 0, src })
-        .then(({ peaks }) => resultWave.setPeaks(peaks))
+        .then(({ peaks }) => wave.setPeaks(peaks))
         .catch(() => {}));
 
     const playBtn = IconButton({
@@ -280,7 +548,10 @@ export function NewCoverFlow() {
     });
 
     // A/B against the original, at the same playhead. The source track lives
-    // outside the app:// origin, so its bytes come over IPC as a blob.
+    // outside the app:// origin, so its bytes come over IPC as a blob. When the
+    // run was trimmed, the cover's 0:00 is the trim's start, so the original
+    // has to be offset by it or the two sides play different bars.
+    const offset = effectiveTrim()?.start || 0;
     let original = null;
     let side = "cover";
     const ab = Segmented({
@@ -290,13 +561,13 @@ export function NewCoverFlow() {
       onChange: async (next) => {
         if (next === side) return;
         if (next === "original" && !original) {
-          const bytes = await window.vocalis.readAudio(song?.path);
-          if (!bytes) return;   // unreadable source — stay on the cover
-          original = new Audio(URL.createObjectURL(new Blob([bytes])));
+          const url = await sourceAudioUrl();
+          if (!url) return;     // unreadable source — stay on the cover
+          original = new Audio(url);
         }
         const from = side === "cover" ? audio : original;
         const to = next === "cover" ? audio : original;
-        to.currentTime = from.currentTime;
+        to.currentTime = from.currentTime + (next === "original" ? offset : -offset);
         if (!from.paused) { to.play().catch(() => {}); from.pause(); }
         side = next;
       },
@@ -426,6 +697,7 @@ export function NewCoverFlow() {
   });
 
   function missingInput() {
+    if (fetchJobId) return "Still fetching that link.";
     if (!song) return "Choose a song first.";
     if (!voiceId) return "Choose a voice first.";
     return null;
@@ -449,6 +721,7 @@ export function NewCoverFlow() {
         songName: song.name,
         voiceId,
         params,
+        trim: effectiveTrim(),
       });
       paintResult();
       paintGenerate();
@@ -491,10 +764,19 @@ export function NewCoverFlow() {
     on(root, "drop", (e) => {
       e.preventDefault();
       root.classList.remove("flow--dragging");
+
       const file = e.dataTransfer?.files?.[0];
-      if (!file || !AUDIO_RE.test(file.name)) return;
-      const path = window.vocalis.pathForFile(file);
-      if (path) setSong(path);
+      if (file) {
+        if (!AUDIO_RE.test(file.name)) return;
+        const path = window.vocalis.pathForFile(file);
+        if (path) setSong({ path, name: file.name });
+        return;
+      }
+
+      // Dragging a song out of a browser hands over text, not a file.
+      const text = (e.dataTransfer?.getData("text/uri-list")
+        || e.dataTransfer?.getData("text/plain") || "").trim();
+      if (!song && !fetchJobId && URL_RE.test(text)) fetchLink(text);
     }),
   ];
 
@@ -523,8 +805,13 @@ export function NewCoverFlow() {
   };
 
   root.destroy = () => {
+    // A half-finished download has nowhere to be delivered once the view is
+    // gone, so it stops with the view rather than running on unattended.
+    if (fetchJobId) cancelJob(fetchJobId);
     offs.forEach((f) => f());
     offDrag.forEach((f) => f());
+    songSection.querySelector(".trimpanel")?.destroy?.();
+    if (sourceBlobUrl) URL.revokeObjectURL(sourceBlobUrl);
     resultWave?.destroy?.();
     setFlowDirtyCheck(null);
   };

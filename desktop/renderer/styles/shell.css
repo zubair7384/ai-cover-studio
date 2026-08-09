@@ -62,11 +62,19 @@
   font-weight: var(--t-label-weight);
 }
 
-.sidebar__scroll { flex: 1; overflow-y: auto; padding: var(--sp-2) var(--sp-2) var(--sp-3); }
+/* Rows sit inset from the window edge — enough that the selection reads as a
+   floating pill rather than a band touching the frame, as macOS System
+   Settings does, but no wider (see --sidebar-inset). */
+.sidebar__scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--sp-2) var(--sidebar-inset) var(--sp-3);
+}
 
 .sidebar__section + .sidebar__section { margin-top: var(--sp-4); }
 .sidebar__section-title {
-  /* Title Case, 11px semibold — NOT all-caps, not letterspaced wide (§4/V4). */
+  /* Title Case, 11px semibold — NOT all-caps, not letterspaced wide (§4/V4).
+     The extra 8px matches the row's own padding so headers align with labels. */
   padding: 0 var(--sp-2) var(--sp-1);
 }
 
@@ -77,7 +85,7 @@
   width: 100%;
   height: var(--row-sidebar);
   padding: 0 var(--sp-2);
-  border-radius: var(--r-control);
+  border-radius: var(--r-card);
   color: var(--text-secondary);
   font-size: var(--t-body-size);
   text-align: left;
@@ -91,34 +99,26 @@
 .nav-row__shortcut { flex: none; color: var(--text-tertiary); }
 
 /* Resting is transparent with no border of any kind; the UA button border is
-   zeroed in base.css. Exactly one row carries --on at a time. */
+   zeroed in base.css. Exactly one row carries --on at a time.
+
+   Solid accent fill rather than §6's tint-plus-rail. At 14% the pill barely
+   registered against the sidebar surface, so the gutter around it read as no
+   gutter at all — which is what "I can't see the offset" actually was. macOS
+   System Settings and Music both fill the selected row solid for this reason.
+   Near-black text per §3: white on an accent fill fails contrast. */
 .nav-row--on {
-  background: var(--tint);
-  color: var(--text-primary);
+  background: var(--accent);
+  color: var(--on-accent);
   font-weight: var(--t-body-em-weight);
 }
-.nav-row--on .nav-row__icon { color: var(--accent); }
+.nav-row--on .nav-row__icon,
+.nav-row--on .nav-row__shortcut { color: var(--on-accent); }
+.nav-row--on:hover { background: var(--accent-hover); }
 
 /* While a flow is pushed over the library, the place you will return to stays
-   marked — quieter, but not blank, so the sidebar never looks dead. */
-.nav-row--under { color: var(--text-primary); }
-.nav-row--under::before {
-  content: "";
-  position: absolute;
-  left: 0; top: 4px; bottom: 4px;
-  width: 2px;
-  border-radius: 1px;
-  background: var(--gr-600);
-}
-/* 2px amber left rail, matching the list-row selection language (§6). */
-.nav-row--on::before {
-  content: "";
-  position: absolute;
-  left: 0; top: 4px; bottom: 4px;
-  width: 2px;
-  border-radius: 1px;
-  background: var(--accent);
-}
+   marked — quieter than selected, but not blank, so the sidebar never looks
+   dead while New cover or Train a voice is open. */
+.nav-row--under { background: var(--gr-800); color: var(--text-primary); }
 
 /* Activity rows carry a 14px ring instead of an icon. */
 .nav-row__ring { flex: none; display: inline-flex; }
@@ -128,7 +128,7 @@
    §8 removed the old one-item "App" section as dead weight in the IA. */
 .sidebar__footer-nav {
   flex: none;
-  padding: 0 var(--sp-2) var(--sp-2);
+  padding: 0 var(--sidebar-inset) var(--sp-2);
 }
 
 /* ---- Account row -------------------------------------------------------- */
@@ -138,7 +138,7 @@
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  padding: var(--sp-2) var(--sp-3);
+  padding: var(--sp-2) calc(var(--sidebar-inset) + var(--sp-1));
   border-top: 1px solid var(--hairline);
   min-width: 0;
 }
@@ -467,6 +467,17 @@
 /* A drag anywhere in the view lights the zone, not just a drag over it. */
 .flow--dragging .dropzone { border-color: var(--accent); background: var(--tint); }
 
+/* ---- Paste-a-link row --------------------------------------------------- */
+
+.linkrow {
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+.linkrow__field { display: flex; align-items: center; gap: var(--sp-2); }
+.linkrow__input { flex: 1; min-width: 0; }
+.linkrow__status { color: var(--text-secondary); min-height: 1em; }
+.linkrow__status--error { color: var(--err-text); }
+
 /* ---- Collapsed song row ------------------------------------------------- */
 
 .songrow {
@@ -478,7 +489,23 @@
   border-radius: var(--r-card);
 }
 .songrow__main { flex: 1; min-width: 0; }
+.songrow__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .songrow__meta { color: var(--text-secondary); }
+
+/* ---- Trim panel --------------------------------------------------------- */
+/* Same card as .runpanel — trimming is an edit to the song above it, so it
+   reads as an extension of that row rather than a second thing on the page. */
+
+.trimpanel {
+  margin-top: var(--sp-2);
+  display: flex; flex-direction: column; gap: var(--sp-3);
+  padding: var(--sp-3);
+  background: var(--bg-raised);
+  border: var(--border-1);
+  border-radius: var(--r-card);
+}
+.trimpanel__foot { display: flex; align-items: center; gap: var(--sp-3); }
+.trimpanel__readout { flex: 1; color: var(--text-secondary); }
 
 /* ---- Voice picker ------------------------------------------------------- */
 

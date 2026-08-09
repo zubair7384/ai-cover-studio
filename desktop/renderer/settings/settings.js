@@ -291,11 +291,14 @@ export function StorageTab(api) {
   function paint(data) {
     root.innerHTML = "";
     const { models, covers, datasets, total, dataDir, hardware } = data;
+    // Older engines predate the fetch cache and omit the key entirely.
+    const downloads = data.downloads || { bytes: 0, count: 0 };
 
     root.appendChild(group("On this Mac",
       shareRow("Voice models", models.bytes, total, `${models.count} files`),
       shareRow("Generated covers", covers.bytes, total, `${covers.count}`),
       shareRow("Training data", datasets.bytes, total),
+      shareRow("Songs fetched from links", downloads.bytes, total, `${downloads.count}`),
       el("div", { class: "storagerow__total" },
         el("span", { class: "t-body-em" }, "Total"),
         el("span", { class: "t-meter tabular" }, fmt.bytes(total)),
@@ -322,6 +325,20 @@ export function StorageTab(api) {
     ));
 
     root.appendChild(group("Danger zone",
+      // A re-fetchable cache is not dangerous to lose, so this one clears on a
+      // single click while the covers below still need a confirm.
+      Button({
+        label: "Clear fetched songs",
+        variant: "secondary",
+        disabled: !downloads.count,
+        tooltip: downloads.count
+          ? "Songs downloaded from links. They are fetched again if you need them."
+          : "Nothing has been fetched from a link yet.",
+        onClick: async () => {
+          await api.clearDownloads().catch(() => {});
+          load();
+        },
+      }),
       // Tertiary, not a bare red button sitting in the panel.
       Button({
         label: "Delete all generated covers",

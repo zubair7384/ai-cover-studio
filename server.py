@@ -359,6 +359,20 @@ def convert(payload: dict) -> dict:
     if not song_path or not Path(song_path).exists():
         raise HTTPException(status_code=400, detail="That song file no longer exists.")
 
+    # Absent keys mean the whole song; 0.0 is a legitimate start, so this cannot
+    # collapse to `or None`.
+    trim_start = payload.get("trim_start")
+    trim_end = payload.get("trim_end")
+    if trim_start is not None or trim_end is not None:
+        try:
+            trim_start = float(trim_start) if trim_start is not None else 0.0
+            trim_end = float(trim_end) if trim_end is not None else 0.0
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="That trim isn't a valid time range.")
+        if trim_end and trim_end - trim_start < 1.0:
+            raise HTTPException(status_code=400,
+                                detail="That selection is under a second — pick a longer part.")
+
     job = Job()
     JOBS[job.id] = job
     _start(job, engine.generate_cover, model_name, song_path,
@@ -366,8 +380,34 @@ def convert(payload: dict) -> dict:
            float(payload.get("index_rate", 0.75) or 0.75),
            float(payload.get("vocal_gain_db", 0.0) or 0.0),
            source_file_name=Path(song_path).name,
-           output_format=str(payload.get("output_format", "mp3") or "mp3"))
+           output_format=str(payload.get("output_format", "mp3") or "mp3"),
+           trim_start=trim_start, trim_end=trim_end)
     return {"job_id": job.id}
+
+
+# ---------------------------------------------------------------------------
+# Fetch a song from a link
+# ---------------------------------------------------------------------------
+@app.post("/api/fetch-url")
+def fetch_url(payload: dict) -> dict:
+    """
+    Resolve a pasted link to a local audio file. Runs as a job because a
+    download is slow enough to need a progress bar and a cancel button.
+    """
+    url = str(payload.get("url", "")).strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="Paste a link first.")
+
+    job = Job()
+    JOBS[job.id] = job
+    _start(job, engine.fetch_remote_audio, url)
+    return {"job_id": job.id}
+
+
+@app.post("/api/downloads/clear")
+def clear_downloads() -> dict:
+    """Empty the fetched-audio cache (Settings → Storage)."""
+    return engine.clear_downloads()
 
 
 # ---------------------------------------------------------------------------
@@ -396,12 +436,14 @@ def storage() -> dict:
     models_bytes, models_count = _dir_size(engine.MODELS_DIR, ("*.pth", "*.index"))
     covers_bytes, covers_count = _dir_size(engine.OUTPUT_DIR, covers_manifest.COVER_GLOBS)
     datasets_bytes, _ = _dir_size(engine.DATASETS_DIR, ("**/*",))
+    downloads_bytes, downloads_count = _dir_size(engine.DOWNLOADS_DIR, ("*",))
 
     return {
         "models": {"bytes": models_bytes, "count": models_count},
         "covers": {"bytes": covers_bytes, "count": covers_count},
         "datasets": {"bytes": datasets_bytes},
-        "total": models_bytes + covers_bytes + datasets_bytes,
+        "downloads": {"bytes": downloads_bytes, "count": downloads_count},
+        "total": models_bytes + covers_bytes + datasets_bytes + downloads_bytes,
         "dataDir": str(engine.DATA_DIR),
         "outputDir": str(engine.OUTPUT_DIR),
         "modelsDir": str(engine.MODELS_DIR),

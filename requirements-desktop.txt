@@ -16,3 +16,8 @@ pydub
 fastapi
 uvicorn[standard]
 python-multipart            # required for FastAPI file uploads
+
+# --- "paste a link" input ---
+# Sites break yt-dlp's extractors every few months, so the pin in the lock file
+# is the one dependency worth bumping on every release.
+yt-dlp

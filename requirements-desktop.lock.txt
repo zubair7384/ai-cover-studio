@@ -111,3 +111,4 @@ typing_extensions==4.16.0
 tzdata==2026.2
 urllib3==2.7.0
 uvicorn==0.50.2
+yt-dlp==2026.7.4

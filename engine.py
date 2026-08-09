@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -72,9 +73,10 @@ DATA_DIR = Path(os.environ.get("ACS_DATA_DIR", BASE_DIR)).resolve()
 MODELS_DIR = DATA_DIR / "voice_models"       # trained/downloaded RVC .pth/.index
 OUTPUT_DIR = DATA_DIR / "outputs"            # final covers land here
 DATASETS_DIR = DATA_DIR / "training_datasets"  # uploaded voice samples
+DOWNLOADS_DIR = DATA_DIR / "downloads"       # audio fetched from pasted links
 SEPARATOR_MODEL_DIR = DATA_DIR / ".separator_models"  # cached HTDemucs weights
 
-for d in (MODELS_DIR, OUTPUT_DIR, DATASETS_DIR, SEPARATOR_MODEL_DIR):
+for d in (MODELS_DIR, OUTPUT_DIR, DATASETS_DIR, DOWNLOADS_DIR, SEPARATOR_MODEL_DIR):
     d.mkdir(parents=True, exist_ok=True)
 
 SAMPLE_RATE_CHOICES = ["32000", "40000", "48000"]
@@ -391,8 +393,252 @@ def mix_and_export(
 
 
 # ---------------------------------------------------------------------------
+# Remote audio — "paste a link" input
+#
+# Fetching is a step of its own rather than a branch inside generate_cover: the
+# user gets the resolved title and length back *before* committing minutes of
+# separation to the wrong video. The pipeline downstream is unchanged — it only
+# ever wanted a local path.
+# ---------------------------------------------------------------------------
+MAX_FETCH_SECONDS = 30 * 60
+
+# yt-dlp's own wording, rewritten as something a person can act on. Ordered:
+# the first needle that matches wins, so put the specific cases first.
+_FETCH_ERRORS: tuple[tuple[str, str], ...] = (
+    ("is private", "That video is private, so it can't be fetched."),
+    ("members-only", "That video is members-only, so it can't be fetched."),
+    ("age-restricted", "That video is age-restricted and needs a signed-in account."),
+    ("confirm your age", "That video is age-restricted and needs a signed-in account."),
+    ("sign in to confirm", "The site is asking this machine to sign in, so the fetch was refused."),
+    ("not available in your country", "That video is blocked in your country."),
+    ("removed by the uploader", "That video was removed by its uploader."),
+    ("video unavailable", "That video is unavailable — check the link."),
+    ("video is unavailable", "That video is unavailable — check the link."),
+    ("unsupported url", "Vocalis can't fetch audio from that site."),
+    ("no video formats", "There's no downloadable audio on that page."),
+    ("http error 429", "The site is rate-limiting this machine. Wait a few minutes, then try again."),
+    ("ffmpeg", "ffmpeg is missing, so the download can't be converted to audio. Install it with: brew install ffmpeg"),
+)
+
+
+def _friendly_fetch_error(message: str) -> str:
+    text = (message or "").lower()
+    for needle, friendly in _FETCH_ERRORS:
+        if needle in text:
+            return friendly
+    # The common cause of everything else is an extractor that the site has
+    # broken since this build shipped, so say the useful thing rather than
+    # echoing a traceback.
+    return ("Couldn't fetch that link. If it plays in a browser, the downloader "
+            "is probably out of date — update it with: pip install -U yt-dlp")
+
+
+def _safe_stem(text: str) -> str:
+    """A filename-safe stem. Also strips '%', which would corrupt an outtmpl."""
+    cleaned = "".join(c if c.isalnum() or c in " -_" else "_" for c in (text or ""))
+    return re.sub(r"[\s_]+", "_", cleaned).strip("_-") or "track"
+
+
+def _remove_partials(stem: str) -> None:
+    """Drop the .part/.ytdl scraps an interrupted download leaves behind."""
+    for path in DOWNLOADS_DIR.iterdir():
+        if (path.is_file() and path.name.startswith(f"{stem}.")
+                and path.suffix in (".part", ".ytdl")):
+            try:
+                path.unlink()
+            except OSError:
+                pass
+
+
+class _YdlLogger:
+    """Bridges yt-dlp's logger interface onto the job's log stream."""
+
+    def __init__(self, log_cb: Callable[[str], None]):
+        self.log_cb = log_cb
+
+    def debug(self, msg: str) -> None:
+        # yt-dlp routes normal output through debug() prefixed with "[debug] ".
+        if not str(msg).startswith("[debug] "):
+            self.log_cb(str(msg))
+
+    def info(self, msg: str) -> None:
+        self.log_cb(str(msg))
+
+    def warning(self, msg: str) -> None:
+        self.log_cb(f"Warning: {msg}")
+
+    def error(self, msg: str) -> None:
+        self.log_cb(f"Error: {msg}")
+
+
+def fetch_remote_audio(
+    url: str,
+    progress_cb: ProgressCb = None,
+    log_cb: LogCb = None,
+) -> dict:
+    """
+    Download the audio behind `url` and hand back a local file the cover
+    pipeline can read: {"path", "title", "durationSec", "webpageUrl", "cached"}.
+
+    Results are cached in DOWNLOADS_DIR under the site's own video id, so
+    re-running the same song at a different pitch costs one filesystem check.
+    """
+    progress = progress_cb or _noop_progress
+    emit = log_cb or _noop_log
+
+    url = (url or "").strip()
+    if not re.match(r"^https?://", url, re.I):
+        raise ValueError("Paste a full link starting with http:// or https://.")
+
+    try:
+        from yt_dlp import YoutubeDL
+        from yt_dlp.utils import DownloadError
+    except ImportError as exc:
+        raise ValueError(
+            "Fetching from a link needs yt-dlp, which isn't installed in this "
+            "runtime. Install it with: pip install -U yt-dlp"
+        ) from exc
+
+    progress(0.02, "Reading the link", "")
+    common = {"quiet": True, "no_warnings": True, "noplaylist": True,
+              "logger": _YdlLogger(emit)}
+
+    try:
+        with YoutubeDL({**common, "skip_download": True}) as ydl:
+            info = ydl.extract_info(url, download=False)
+    except DownloadError as exc:
+        raise ValueError(_friendly_fetch_error(str(exc))) from exc
+
+    if not info:
+        raise ValueError("Nothing to fetch at that link.")
+
+    # A playlist link still resolves, with its entries inline. Covering the
+    # whole playlist is not what one Generate press means, so take the first
+    # track and say so rather than silently picking for the user.
+    if info.get("_type") == "playlist":
+        entries = [e for e in (info.get("entries") or []) if e]
+        if not entries:
+            raise ValueError("That playlist is empty.")
+        info = entries[0]
+        emit(f"That link is a playlist — using the first track: {info.get('title')}")
+
+    if info.get("is_live"):
+        raise ValueError("That's a live stream, so it has no fixed length to cover.")
+
+    duration = int(info.get("duration") or 0)
+    if duration > MAX_FETCH_SECONDS:
+        raise ValueError(
+            f"That video is {duration // 60} minutes long. Vocalis fetches up to "
+            f"{MAX_FETCH_SECONDS // 60} minutes — separating anything longer needs "
+            "more memory than most machines have.")
+
+    title = str(info.get("title") or "Untitled")
+    page_url = str(info.get("webpage_url") or url)
+    video_id = str(info.get("id") or "")
+    stem = f"{_safe_stem(title)[:60]}-{video_id}" if video_id else _safe_stem(title)[:60]
+    dest = DOWNLOADS_DIR / f"{stem}.wav"
+
+    if dest.exists() and dest.stat().st_size > 0:
+        emit(f"Already downloaded: {dest.name}")
+        progress(1.0, "Ready", "")
+        return {"path": str(dest), "title": title, "durationSec": duration or None,
+                "webpageUrl": page_url, "cached": True}
+
+    def hook(d: dict) -> None:
+        if d.get("status") == "downloading":
+            total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
+            got = d.get("downloaded_bytes") or 0
+            frac = (got / total) if total else 0.0
+            note = f"{got / 1e6:.1f} of {total / 1e6:.1f} MB" if total else ""
+            # Cancellation unwinds through here, same as the cover pipeline.
+            progress(0.05 + 0.8 * min(1.0, frac), "Downloading audio", note)
+        elif d.get("status") == "finished":
+            progress(0.88, "Converting to audio", "")
+
+    opts = {
+        **common,
+        "format": "bestaudio/best",
+        "outtmpl": str(DOWNLOADS_DIR / f"{stem}.%(ext)s"),
+        "progress_hooks": [hook],
+        # WAV keeps the download lossless relative to its source; re-encoding to
+        # MP3 here would stack a second generation of loss under the separator.
+        "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "wav"}],
+        "retries": 3,
+        "overwrites": True,
+        # Never resume a stray .part: a scrap left by a crash belongs to an
+        # older attempt and makes the retry fail rather than succeed.
+        "continuedl": False,
+    }
+
+    log.info("Fetching %s -> %s", page_url, dest.name)
+    try:
+        with YoutubeDL(opts) as ydl:
+            ydl.download([page_url])
+    except DownloadError as exc:
+        _remove_partials(stem)
+        raise ValueError(_friendly_fetch_error(str(exc))) from exc
+    except BaseException:
+        # Cancellation unwinds out of the progress hook, so it lands here too —
+        # either way the cache must not keep a half-written file.
+        _remove_partials(stem)
+        raise
+
+    if not dest.exists():
+        # The postprocessor names the file; if it chose a different extension,
+        # take whatever landed under our stem rather than failing outright.
+        landed = [p for p in DOWNLOADS_DIR.iterdir() if p.is_file() and p.stem == stem]
+        if not landed:
+            raise ValueError("The download finished but produced no audio file.")
+        dest = landed[0]
+
+    progress(1.0, "Ready", "")
+    return {"path": str(dest), "title": title, "durationSec": duration or None,
+            "webpageUrl": page_url, "cached": False}
+
+
+def clear_downloads() -> dict:
+    """Empty the fetched-audio cache. Covers already made are untouched."""
+    removed = freed = 0
+    for path in DOWNLOADS_DIR.iterdir():
+        if not path.is_file():
+            continue
+        try:
+            size = path.stat().st_size
+            path.unlink()
+            removed += 1
+            freed += size
+        except OSError:
+            log.warning("Couldn't remove %s", path)
+    return {"removed": removed, "freedBytes": freed}
+
+
+# ---------------------------------------------------------------------------
 # Full inference pipeline
 # ---------------------------------------------------------------------------
+def trim_track(song_path: str, start: float, end: float, work_dir: Path) -> Path:
+    """
+    Cut [start, end) out of the song and return the slice.
+
+    Done before separation rather than after mixing: the whole pipeline then
+    works on a fraction of the audio, which is the point of trimming a
+    10-minute video down to one verse.
+    """
+    from pydub import AudioSegment
+
+    audio = AudioSegment.from_file(song_path)
+    total = len(audio) / 1000.0
+    start = max(0.0, float(start))
+    end = min(total, float(end)) if end else total
+    if end - start < 1.0:
+        raise ValueError("That selection is under a second — pick a longer part.")
+
+    out = work_dir / "trimmed.wav"
+    audio[int(start * 1000):int(end * 1000)].export(out, format="wav")
+    log.info("Trimmed %.2fs–%.2fs (%.2fs of %.2fs) -> %s",
+             start, end, end - start, total, out.name)
+    return out
+
+
 def generate_cover(
     model_name: str,
     song_path: str,
@@ -403,6 +649,8 @@ def generate_cover(
     log_cb: LogCb = None,
     source_file_name: str = "",
     output_format: str = "mp3",
+    trim_start: Optional[float] = None,
+    trim_end: Optional[float] = None,
 ) -> Path:
     """
     Run the full cover pipeline. Reports progress via callbacks and returns the
@@ -423,9 +671,18 @@ def generate_cover(
     log.info("=== New cover job: model=%s song=%s ===", model_name, song_path)
 
     try:
+        # Trimming is not one of the four numbered steps: it is preparation of
+        # the input, over in a second or two, and renumbering the pipeline would
+        # move the goalposts the progress meter is calibrated against.
+        pipeline_input = song_path
+        if trim_start is not None or trim_end is not None:
+            progress(0.02, "Trimming the selection", "")
+            pipeline_input = str(trim_track(song_path, trim_start or 0.0,
+                                            trim_end or 0.0, work_dir))
+
         progress(0.05, "Step 1/4 — separating vocals & instrumental (HTDemucs)",
                  "First run downloads the separation model (~85 MB).")
-        vocals, instrumental = separate_track(song_path, work_dir)
+        vocals, instrumental = separate_track(pipeline_input, work_dir)
 
         progress(0.45, "Step 2/4 — cloning vocals with RVC (RMVPE)",
                  "First run downloads the RMVPE pitch model (~180 MB).")
