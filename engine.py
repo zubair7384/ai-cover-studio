@@ -359,21 +359,33 @@ def apply_vocal_effects(cloned_path: Path, work_dir: Path) -> Path:
 # ---------------------------------------------------------------------------
 # Step 4 — final mix with pydub
 # ---------------------------------------------------------------------------
+# What the UI offers, mapped to what pydub needs.
+OUTPUT_FORMATS = {
+    "mp3": {"ext": "mp3", "format": "mp3", "params": {"bitrate": "320k"}},
+    "wav": {"ext": "wav", "format": "wav", "params": {"parameters": ["-acodec", "pcm_s24le"]}},
+    "flac": {"ext": "flac", "format": "flac", "params": {}},
+}
+
+
 def mix_and_export(
     vocals_fx_path: Path,
     instrumental_path: Path,
     vocal_gain_db: float,
+    output_format: str = "mp3",
 ) -> Path:
-    """Overlay the polished vocals on the instrumental, export a 320k MP3."""
+    """Overlay the polished vocals on the instrumental and export."""
     from pydub import AudioSegment
+
+    spec = OUTPUT_FORMATS.get(str(output_format).lower(), OUTPUT_FORMATS["mp3"])
 
     log.info("Mixing final cover …")
     vocals = AudioSegment.from_file(vocals_fx_path).apply_gain(vocal_gain_db)
     instrumental = AudioSegment.from_file(instrumental_path).apply_gain(-1.0)
     final = instrumental.overlay(vocals)
 
-    out_path = OUTPUT_DIR / f"final_cover_{time.strftime('%Y%m%d_%H%M%S')}.mp3"
-    final.export(out_path, format="mp3", bitrate="320k")
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+    out_path = OUTPUT_DIR / f"final_cover_{stamp}.{spec['ext']}"
+    final.export(out_path, format=spec["format"], **spec["params"])
     log.info("Saved final cover -> %s", out_path)
     return out_path
 
@@ -389,6 +401,8 @@ def generate_cover(
     vocal_gain_db: float = 0.0,
     progress_cb: ProgressCb = None,
     log_cb: LogCb = None,
+    source_file_name: str = "",
+    output_format: str = "mp3",
 ) -> Path:
     """
     Run the full cover pipeline. Reports progress via callbacks and returns the
@@ -421,8 +435,26 @@ def generate_cover(
         progress(0.80, "Step 3/4 — polishing vocals (reverb/delay)", "")
         polished = apply_vocal_effects(cloned, work_dir)
 
-        progress(0.92, "Step 4/4 — mixing & exporting MP3", "")
-        final_path = mix_and_export(polished, instrumental, float(vocal_gain_db))
+        progress(0.92, "Step 4/4 — mixing & exporting", "")
+        final_path = mix_and_export(polished, instrumental, float(vocal_gain_db),
+                                    output_format)
+
+        # Record what this cover actually IS, with the parameters actually
+        # used, before anything else can observe the file. Written here rather
+        # than in the route so any caller of the pipeline gets a record.
+        try:
+            import covers_manifest
+            covers_manifest.record_generation(
+                final_path,
+                voice_id=model_name,
+                source_path=song_path,
+                source_file_name=source_file_name or Path(song_path).name,
+                pitch_shift=int(pitch_shift),
+                voice_character=float(index_rate),
+            )
+        except Exception:
+            # A manifest failure must never lose the user their cover.
+            log.error("Failed to record cover metadata:\n%s", traceback.format_exc())
 
         progress(1.0, "Done!", "")
         return final_path

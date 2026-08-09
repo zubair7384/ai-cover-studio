@@ -183,6 +183,9 @@
   --t-meter-lg-size: 15px; --t-meter-lg-lh: 20px; --t-meter-lg-weight: 500; --t-meter-lg-track: 0;
 
   --measure: 62ch;   /* body copy max width (§4) */
+  /* Content column. The window can be any width; the content must not be —
+     otherwise metadata is stranded far from the label it belongs to. */
+  --content-max: 860px;
 
   /* ==========================================================================
      4. SHAPE — §5. Nothing above 12.

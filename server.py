@@ -28,6 +28,7 @@ import queue
 import shutil
 import tempfile
 import threading
+import traceback
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -38,6 +39,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 
 import engine
+import covers_manifest
+import voices_manifest
 
 app = FastAPI(title="AI Cover Studio")
 
@@ -54,8 +57,12 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 # Job registry — each long task streams events to its own queue
 # ---------------------------------------------------------------------------
+class JobCancelled(Exception):
+    """Raised out of the progress callback to unwind a running pipeline."""
+
+
 class Job:
-    __slots__ = ("id", "q", "done", "result", "error")
+    __slots__ = ("id", "q", "done", "result", "error", "cancelled")
 
     def __init__(self) -> None:
         self.id = uuid.uuid4().hex
@@ -63,6 +70,7 @@ class Job:
         self.done = False
         self.result: Optional[dict] = None
         self.error: Optional[str] = None
+        self.cancelled = False
 
     def put(self, event: dict) -> None:
         self.q.put(event)
@@ -75,6 +83,11 @@ _train_lock = threading.Lock()  # one training job at a time
 def _run_job(job: Job, fn, *args, **kwargs) -> None:
     """Execute fn in this thread, translating callbacks into SSE events."""
     def progress_cb(frac: float, step: str, note: str = "") -> None:
+        # Python threads cannot be killed, so cancellation is cooperative: the
+        # pipeline reports progress between stages, and we unwind at the next
+        # boundary. The UI says so rather than implying an instant stop.
+        if job.cancelled:
+            raise JobCancelled()
         job.put({"type": "progress", "fraction": round(frac, 4),
                  "step": step, "note": note})
 
@@ -87,10 +100,16 @@ def _run_job(job: Job, fn, *args, **kwargs) -> None:
         result = fn(*args, **kwargs)
         job.result = result if isinstance(result, dict) else {"path": str(result)}
         job.put({"type": "done", "result": job.result})
+    except JobCancelled:
+        engine.log.info("Job %s cancelled", job.id)
+        job.put({"type": "cancelled"})
     except Exception as exc:  # noqa: BLE001 — surfaced to the UI
         engine.log.exception("Job %s failed", job.id)
         job.error = str(exc)
-        job.put({"type": "error", "message": str(exc)})
+        # `detail` carries the traceback for a "Copy details" button; the UI
+        # never renders a stack trace inline (§Prompt 4).
+        job.put({"type": "error", "message": str(exc),
+                 "detail": traceback.format_exc()})
     finally:
         job.done = True
         job.put({"type": "_eof"})  # sentinel so the SSE generator can stop
@@ -152,23 +171,47 @@ def _index_files_for(stem: str) -> list[Path]:
 
 @app.get("/api/models/meta")
 def models_meta() -> dict:
-    """List installed models with on-disk metadata (size, modified time)."""
-    out = []
-    for name in engine.list_voice_models():
-        pth = engine.MODELS_DIR / f"{name}.pth"
-        try:
-            st = pth.stat()
-        except OSError:
-            continue
-        idx = _index_files_for(name)
-        idx_size = sum(p.stat().st_size for p in idx if p.exists())
-        out.append({
-            "name": name,
-            "size": st.st_size + idx_size,
-            "modified": st.st_mtime,
-            "has_index": bool(idx),
-        })
-    return {"models": out}
+    """
+    Installed models with everything the library needs: sample rate and
+    architecture read from the .pth header, whether a preview clip exists, and
+    how many covers reference the voice (so a delete can warn first).
+    """
+    return {"models": voices_manifest.list_voices()}
+
+
+@app.get("/api/models/preview/{name}")
+def model_preview(name: str) -> FileResponse:
+    """Serve a voice's preview clip."""
+    safe = Path(name).stem
+    path = voices_manifest.preview_path(safe)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="No preview clip for that voice yet.")
+    return FileResponse(path, media_type="audio/mpeg")
+
+
+@app.post("/api/models/preview")
+def create_model_preview(payload: dict) -> dict:
+    """
+    Render a short sample of a voice from a reference vocal clip. Runs the RVC
+    step only — no separation, no mixing — so it takes seconds, not minutes.
+
+    The reference is passed as a local path rather than an upload: the renderer,
+    the server and the file all live on the same machine, so a round trip
+    through multipart would only copy bytes for no reason.
+    """
+    safe = Path(str(payload.get("model_name", ""))).stem
+    ref_path = str(payload.get("reference_path", ""))
+    if not safe:
+        raise HTTPException(status_code=400, detail="Which voice?")
+    if not ref_path or not Path(ref_path).exists():
+        raise HTTPException(status_code=400, detail="That reference clip no longer exists.")
+
+    job = Job()
+    JOBS[job.id] = job
+    _start(job, voices_manifest.generate_preview, safe, ref_path,
+           int(payload.get("pitch_shift", 0) or 0),
+           float(payload.get("index_rate", 0.75) or 0.75))
+    return {"job_id": job.id}
 
 
 @app.post("/api/models/rename")
@@ -203,6 +246,9 @@ def delete_model(payload: dict) -> dict:
             idx.unlink()
         except OSError:
             pass
+    # Take the preview clip with it, or a re-imported model of the same name
+    # would inherit the old voice's sample.
+    voices_manifest.delete_preview(name)
     return {"deleted": name, "models": engine.list_voice_models()}
 
 
@@ -222,27 +268,66 @@ def model_file(name: str) -> FileResponse:
 # ---------------------------------------------------------------------------
 @app.get("/api/outputs")
 def list_outputs() -> dict:
-    """List finished covers (final_cover_*.mp3) with size + modified time."""
-    items = []
-    for p in engine.OUTPUT_DIR.glob("final_cover_*.mp3"):
-        try:
-            st = p.stat()
-        except OSError:
-            continue
-        items.append({"name": p.name, "size": st.st_size, "modified": st.st_mtime})
-    items.sort(key=lambda x: x["modified"], reverse=True)
-    return {"covers": items}
+    """
+    Full cover records, reconciled against the disk on every scan.
+
+    Files with no record gain a stub; records whose file has gone are flagged
+    `missing` rather than dropped, so the UI can offer "Locate…" and
+    "Remove from library".
+    """
+    return {"covers": covers_manifest.reconcile()}
+
+
+@app.post("/api/outputs/migrate")
+def migrate_outputs(payload: dict | None = None) -> dict:
+    """
+    One-time backfill. The desktop app hands over the renderer's retired
+    localStorage `coverMeta` (which the app can no longer read itself, because
+    the renderer origin changed) and everything else is backfilled from
+    filenames. Idempotent — existing records are never downgraded.
+    """
+    legacy = (payload or {}).get("coverMeta") or {}
+    if not isinstance(legacy, dict):
+        raise HTTPException(status_code=400, detail="coverMeta must be an object.")
+    return covers_manifest.migrate(legacy)
+
+
+@app.post("/api/outputs/title")
+def set_output_title(payload: dict) -> dict:
+    """Rename a cover in the library. The file on disk is untouched."""
+    cover_id = Path(str(payload.get("id", ""))).name
+    try:
+        return covers_manifest.update_title(cover_id, str(payload.get("title", "")))
+    except KeyError:
+        raise HTTPException(status_code=404, detail="That cover is not in the library.")
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+
+
+@app.post("/api/outputs/relocate")
+def relocate_output(payload: dict) -> dict:
+    """Re-point a record at a file that moved outside the app."""
+    cover_id = Path(str(payload.get("id", ""))).name
+    try:
+        return covers_manifest.relocate(cover_id, str(payload.get("path", "")))
+    except KeyError:
+        raise HTTPException(status_code=404, detail="That cover is not in the library.")
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err))
 
 
 @app.post("/api/outputs/delete")
 def delete_output(payload: dict) -> dict:
-    """Delete a single finished cover by filename."""
-    safe = Path(str(payload.get("name", ""))).name
-    path = engine.OUTPUT_DIR / safe
-    if not safe.startswith("final_cover_") or not path.exists():
-        raise HTTPException(status_code=404, detail="Output not found.")
-    path.unlink()
-    return {"deleted": safe}
+    """
+    Remove a cover. `trashFile` decides whether the file goes to the Trash or
+    only the library record is forgotten (the latter is "Remove from library"
+    for a file that has already gone missing).
+    """
+    cover_id = Path(str(payload.get("id") or payload.get("name") or "")).name
+    if not cover_id:
+        raise HTTPException(status_code=400, detail="Which cover?")
+    trash = payload.get("trashFile", True)
+    return covers_manifest.delete(cover_id, trash_file=bool(trash))
 
 
 # ---------------------------------------------------------------------------
@@ -261,38 +346,182 @@ def _save_upload(upload: UploadFile, prefix: str) -> str:
 # Convert (cover generation)
 # ---------------------------------------------------------------------------
 @app.post("/api/convert")
-def convert(
-    model_name: str = Form(...),
-    pitch_shift: int = Form(0),
-    index_rate: float = Form(0.75),
-    vocal_gain_db: float = Form(0.0),
-    song: UploadFile = File(...),
-) -> dict:
-    song_path = _save_upload(song, "song_")
+def convert(payload: dict) -> dict:
+    """
+    Start a cover run. The song is referenced by local path rather than
+    uploaded: renderer, server and file share a machine, so multipart would
+    copy a 40 MB track for nothing.
+    """
+    model_name = str(payload.get("model_name", ""))
+    song_path = str(payload.get("song_path", ""))
+    if not model_name:
+        raise HTTPException(status_code=400, detail="Choose a voice first.")
+    if not song_path or not Path(song_path).exists():
+        raise HTTPException(status_code=400, detail="That song file no longer exists.")
+
     job = Job()
     JOBS[job.id] = job
     _start(job, engine.generate_cover, model_name, song_path,
-           int(pitch_shift), float(index_rate), float(vocal_gain_db))
+           int(payload.get("pitch_shift", 0) or 0),
+           float(payload.get("index_rate", 0.75) or 0.75),
+           float(payload.get("vocal_gain_db", 0.0) or 0.0),
+           source_file_name=Path(song_path).name,
+           output_format=str(payload.get("output_format", "mp3") or "mp3"))
     return {"job_id": job.id}
+
+
+# ---------------------------------------------------------------------------
+# Storage (Settings)
+# ---------------------------------------------------------------------------
+def _dir_size(path: Path, patterns: tuple[str, ...] = ("*",)) -> tuple[int, int]:
+    """(bytes, file count) for files matching any pattern directly in `path`."""
+    total = count = 0
+    seen: set[Path] = set()
+    for pattern in patterns:
+        for f in path.glob(pattern):
+            if f in seen or not f.is_file():
+                continue
+            seen.add(f)
+            try:
+                total += f.stat().st_size
+                count += 1
+            except OSError:
+                pass
+    return total, count
+
+
+@app.get("/api/storage")
+def storage() -> dict:
+    """What Vocalis is using on this Mac, and where."""
+    models_bytes, models_count = _dir_size(engine.MODELS_DIR, ("*.pth", "*.index"))
+    covers_bytes, covers_count = _dir_size(engine.OUTPUT_DIR, covers_manifest.COVER_GLOBS)
+    datasets_bytes, _ = _dir_size(engine.DATASETS_DIR, ("**/*",))
+
+    return {
+        "models": {"bytes": models_bytes, "count": models_count},
+        "covers": {"bytes": covers_bytes, "count": covers_count},
+        "datasets": {"bytes": datasets_bytes},
+        "total": models_bytes + covers_bytes + datasets_bytes,
+        "dataDir": str(engine.DATA_DIR),
+        "outputDir": str(engine.OUTPUT_DIR),
+        "modelsDir": str(engine.MODELS_DIR),
+        "hardware": engine.hardware_summary(),
+    }
+
+
+@app.post("/api/outputs/delete-all")
+def delete_all_outputs(payload: dict | None = None) -> dict:
+    """
+    Delete every generated cover. The UI states the exact count and size first
+    and requires a second click — this endpoint is the second click.
+    """
+    trash = bool((payload or {}).get("trashFiles", True))
+    records = covers_manifest.load()
+    removed = 0
+    freed = 0
+    for name in list(records.keys()):
+        path = Path(records[name].get("outputPath") or (engine.OUTPUT_DIR / name))
+        try:
+            freed += path.stat().st_size
+        except OSError:
+            pass
+        covers_manifest.delete(name, trash_file=trash)
+        removed += 1
+    return {"removed": removed, "freedBytes": freed}
+
+
+# ---------------------------------------------------------------------------
+# Audio probe — for the training recordings list
+# ---------------------------------------------------------------------------
+_MIN_USABLE_SEC = 3.0
+_MAX_USABLE_SEC = 900.0
+
+
+def _probe_one(path: Path, target_sr: int) -> dict:
+    """Duration, sample rate and an honest usability warning for one clip."""
+    info: dict = {
+        "path": str(path), "name": path.name,
+        "durationSec": None, "sampleRate": None, "channels": None,
+        "warning": None,
+    }
+    if not path.exists():
+        info["warning"] = "This file has moved or been deleted."
+        return info
+
+    try:
+        import soundfile as sf
+        meta = sf.info(str(path))
+        info["durationSec"] = round(meta.frames / float(meta.samplerate), 2)
+        info["sampleRate"] = int(meta.samplerate)
+        info["channels"] = int(meta.channels)
+    except Exception:
+        try:
+            import av
+            with av.open(str(path)) as c:
+                stream = next((st for st in c.streams if st.type == "audio"), None)
+                if stream is not None:
+                    info["sampleRate"] = int(stream.codec_context.sample_rate or 0) or None
+                    info["channels"] = int(stream.codec_context.channels or 0) or None
+                if c.duration:
+                    info["durationSec"] = round(c.duration / 1_000_000, 2)
+        except Exception:
+            info["warning"] = "Couldn't read this file — it may not be audio."
+            return info
+
+    dur = info["durationSec"]
+    sr = info["sampleRate"]
+
+    # Stated plainly, with the reason — not a generic "invalid file".
+    if dur is not None and dur < _MIN_USABLE_SEC:
+        info["warning"] = f"Only {dur:.1f}s — too short to learn from."
+    elif dur is not None and dur > _MAX_USABLE_SEC:
+        info["warning"] = "Longer than 15 minutes — split it into shorter takes."
+    elif sr and sr < target_sr:
+        info["warning"] = f"{sr // 1000} kHz is below the {target_sr // 1000} kHz target."
+
+    return info
+
+
+@app.post("/api/audio/probe")
+def probe_audio(payload: dict) -> dict:
+    """Duration, sample rate and usability warnings for a set of local clips."""
+    paths = payload.get("paths") or []
+    target = int(payload.get("target_sample_rate", 40000) or 40000)
+    return {"clips": [_probe_one(Path(str(p)), target) for p in paths]}
+
+
+@app.post("/api/audio/scan-folder")
+def scan_folder(payload: dict) -> dict:
+    """Every audio file directly inside a folder — for folder drops."""
+    folder = Path(str(payload.get("path", ""))).expanduser()
+    if not folder.is_dir():
+        raise HTTPException(status_code=400, detail="That folder no longer exists.")
+    target = int(payload.get("target_sample_rate", 40000) or 40000)
+    files = sorted(p for p in folder.iterdir()
+                   if p.suffix.lower() in engine.AUDIO_EXTS)
+    return {"clips": [_probe_one(p, target) for p in files]}
 
 
 # ---------------------------------------------------------------------------
 # Train
 # ---------------------------------------------------------------------------
 @app.post("/api/train")
-def train(
-    model_name: str = Form("my_voice"),
-    sample_rate: str = Form("40000"),
-    epochs: int = Form(300),
-    dataset_dir: str = Form(""),
-    samples: list[UploadFile] = File(default=[]),
-) -> dict:
+def train(payload: dict) -> dict:
+    """
+    Start a training run. Clips are referenced by local path — a training set is
+    routinely hundreds of megabytes, and copying it through multipart before the
+    engine copies it again into the dataset folder would be pure waste.
+    """
     if not _train_lock.acquire(blocking=False):
         raise HTTPException(status_code=409,
                             detail="A training job is already running.")
 
+    model_name = str(payload.get("model_name", "my_voice"))
+    sample_rate = str(payload.get("sample_rate", "40000"))
+    epochs = int(payload.get("epochs", 300) or 300)
+    dataset_dir = str(payload.get("dataset_dir", ""))
     safe_name = engine.safe_model_name(model_name)
-    sample_paths = [_save_upload(s, "sample_") for s in samples or []]
+    sample_paths = [str(p) for p in (payload.get("paths") or [])]
 
     job = Job()
     JOBS[job.id] = job
@@ -311,6 +540,19 @@ def train(
 # ---------------------------------------------------------------------------
 # SSE event stream for a job
 # ---------------------------------------------------------------------------
+@app.post("/api/jobs/{job_id}/cancel")
+def cancel_job(job_id: str) -> dict:
+    """
+    Ask a running job to stop. It unwinds at the next stage boundary rather
+    than instantly, because the work happens in a thread that cannot be killed.
+    """
+    job = JOBS.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="That job has already finished.")
+    job.cancelled = True
+    return {"cancelling": job_id}
+
+
 @app.get("/api/jobs/{job_id}/events")
 def job_events(job_id: str) -> StreamingResponse:
     job = JOBS.get(job_id)

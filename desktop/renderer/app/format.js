@@ -45,18 +45,37 @@ export function dateGroup(unixSeconds, now = new Date()) {
   return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
 
-/**
- * Derive a human title from a source filename (§10: never show a raw generated
- * filename as a title). Prompt 2 replaces this with real stored metadata.
- */
-export function titleFromFilename(filename) {
+/** Unix seconds -> "17 Jul, 02:49" */
+export function dateTime(unixSeconds) {
+  const d = new Date((Number(unixSeconds) || 0) * 1000);
+  const day = d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  const time = d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false });
+  return `${day}, ${time}`;
+}
+
+/** Clean a source filename into a title: strip extension, separators, Title Case. */
+export function cleanFilename(filename) {
   const base = String(filename || "").replace(/\.[^.]+$/, "");
-  if (/^final_cover_\d{8}_\d{6}$/.test(base)) return null;  // no real title available
+  if (!base) return "";
   return base
     .replace(/[_-]+/g, " ")
     .replace(/\s+/g, " ")
     .trim()
     .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/**
+ * Cover title (§10: never show a raw generated filename).
+ *
+ *   sourceFileName present -> that filename, cleaned up
+ *   otherwise              -> "Cover — 17 Jul, 02:49"
+ *
+ * The time is included because several covers routinely share a date, and a
+ * date alone would make them indistinguishable in the list.
+ */
+export function coverTitle({ sourceFileName, when }) {
+  const derived = sourceFileName ? cleanFilename(sourceFileName) : "";
+  return derived || `Cover — ${dateTime(when)}`;
 }
 
 /** "final_cover_20260717_024930.mp3" -> unix seconds, or null. */

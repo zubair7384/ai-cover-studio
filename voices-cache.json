@@ -1,0 +1,29 @@
+{
+  "arijit.pth": {
+    "_stamp": "55225115:1684500644",
+    "sampleRate": 40000,
+    "architecture": "v2",
+    "epochs": null,
+    "author": null,
+    "createdAt": null,
+    "datasetLength": null
+  },
+  "default_voice.pth": {
+    "_stamp": "55223136:1783678131",
+    "sampleRate": 40000,
+    "architecture": "v2",
+    "epochs": null,
+    "author": null,
+    "createdAt": null,
+    "datasetLength": null
+  },
+  "zub.pth": {
+    "_stamp": "55223186:1783686792",
+    "sampleRate": 40000,
+    "architecture": "v2",
+    "epochs": 100,
+    "author": null,
+    "createdAt": "2026-07-10T17:32:55.188011",
+    "datasetLength": null
+  }
+}

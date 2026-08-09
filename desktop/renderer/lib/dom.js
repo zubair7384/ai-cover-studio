@@ -27,7 +27,12 @@ export function el(tag, props = {}, ...children) {
     if (k.startsWith("on") && typeof v === "function") {
       node.addEventListener(k.slice(2).toLowerCase(), v);
     } else if (k === "style" && typeof v === "object") {
-      Object.assign(node.style, v);
+      for (const [prop, value] of Object.entries(v)) {
+        // Object.assign silently drops custom properties — CSSStyleDeclaration
+        // has no `--foo` field, so they must go through setProperty.
+        if (prop.startsWith("--")) node.style.setProperty(prop, value);
+        else node.style[prop] = value;
+      }
     } else if (k === "dataset" && typeof v === "object") {
       Object.assign(node.dataset, v);
     } else if (k === "class" || k === "className") {

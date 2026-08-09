@@ -13,7 +13,8 @@
     "dist:mac": "electron-builder --mac",
     "dist:win": "electron-builder --win",
     "check:contrast": "node scripts/check-contrast.mjs",
-    "check": "node scripts/check-contrast.mjs"
+    "check": "node scripts/check-contrast.mjs && node scripts/check-modules.mjs",
+    "check:modules": "node scripts/check-modules.mjs"
   },
   "devDependencies": {
     "electron": "^33.0.0",

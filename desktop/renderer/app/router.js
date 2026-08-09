@@ -10,13 +10,15 @@ import { set, getState } from "./store.js";
 import { Sheet, Button } from "../components/primitives/index.js";
 
 export const PLACES = ["covers", "voices"];
-export const FLOWS = ["new-cover", "train"];
+export const FLOWS = ["new-cover", "train", "settings"];
 
+// View names (places) stay capitalised; actions are sentence case (§10).
 const TITLES = {
   covers: "Covers",
   voices: "Voices",
-  "new-cover": "New Cover",
-  train: "Train a Voice",
+  "new-cover": "New cover",
+  train: "Train a voice",
+  settings: "Settings",
 };
 
 export const titleFor = (id) => TITLES[id] || "";

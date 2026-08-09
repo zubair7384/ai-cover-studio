@@ -13,12 +13,14 @@
 
 const {
   app, BrowserWindow, ipcMain, dialog, shell, nativeTheme, protocol, net: enet, Menu,
+  nativeImage, Notification, powerSaveBlocker,
 } = require("electron");
 const { spawn } = require("child_process");
 const http = require("http");
 const net = require("net");
 const path = require("path");
 const fs = require("fs");
+const os = require("os");
 const { pathToFileURL } = require("url");
 
 const IS_DEV = !app.isPackaged || process.env.ACS_DEV === "1";
@@ -31,6 +33,23 @@ const IS_DEV = !app.isPackaged || process.env.ACS_DEV === "1";
 // built as ES modules (one file per screen plus a shared store). This must run
 // before `app.whenReady()`.
 const RENDERER_ROOT = path.join(__dirname, "renderer");
+
+// User-chosen data directory, persisted outside DATA_DIR itself (or moving it
+// would orphan the pointer).
+function prefsFile() { return path.join(app.getPath("userData"), "prefs.json"); }
+
+function readPrefs() {
+  try { return JSON.parse(fs.readFileSync(prefsFile(), "utf8")); } catch { return {}; }
+}
+
+function writePrefs(next) {
+  try {
+    fs.mkdirSync(path.dirname(prefsFile()), { recursive: true });
+    fs.writeFileSync(prefsFile(), JSON.stringify({ ...readPrefs(), ...next }, null, 2));
+  } catch (err) {
+    console.error("[prefs] write failed:", err);
+  }
+}
 const APP_ORIGIN = "app://vocalis";
 
 protocol.registerSchemesAsPrivileged([{
@@ -61,7 +80,6 @@ let pyProc = null;
 let serverPort = 0;
 let mainWindow = null;
 let splash = null;
-let settingsWindow = null;
 
 // ---------------------------------------------------------------------------
 // Path resolution — dev tree vs packaged bundle
@@ -76,7 +94,8 @@ function resolvePaths() {
       python: fs.existsSync(venvPy) ? venvPy : "python3",
       serverScript: path.join(repo, "server.py"),
       resourceDir: repo,
-      dataDir: repo, // dev writes back into the repo tree (git-ignored)
+      // dev writes back into the repo tree (git-ignored) unless moved
+      dataDir: readPrefs().dataDir || repo,
     };
   }
   // Packaged: assets live under <resources>/backend, user data in userData.
@@ -84,7 +103,7 @@ function resolvePaths() {
   const runtimePy = process.platform === "win32"
     ? path.join(backend, "runtime", "python.exe")
     : path.join(backend, "runtime", "bin", "python3");
-  const dataDir = app.getPath("userData");
+  const dataDir = readPrefs().dataDir || app.getPath("userData");
   seedDataDir(dataDir);
   return {
     python: runtimePy,
@@ -310,32 +329,97 @@ function attachStyleguide(win) {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Settings window (§8: Mac apps put settings in a separate ⌘, window)
-// ---------------------------------------------------------------------------
-// Prompt 6 fills in the four tabs; this gives ⌘, and the sidebar gear a real
-// destination now. Non-resizable width 620, per the design system.
-function openSettings() {
-  if (settingsWindow && !settingsWindow.isDestroyed()) {
-    settingsWindow.focus();
-    return;
+// Settings is an in-app page, not a separate window (product decision — the
+// design system asks for a window; see SettingsView). The chrome handler below
+// is retained because it is harmless and the page calls it optionally.
+ipcMain.handle("vocalis:settingsChrome", (evt, { title, height } = {}) => {
+  const win = BrowserWindow.fromWebContents(evt.sender);
+  if (!win || win.isDestroyed()) return;
+  if (title) win.setTitle(title);
+  if (height) {
+    const [w] = win.getSize();
+    win.setSize(w, Math.round(Math.min(900, Math.max(280, height))), true);
   }
-  settingsWindow = new BrowserWindow({
-    width: 620, height: 420,
-    resizable: false, minimizable: false, maximizable: false,
-    title: "Settings",
-    backgroundColor: "#181A1C",
-    parent: mainWindow || undefined,
-    titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
-    webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
+});
+
+// Settings live in localStorage, which the two renderers share but do not
+// observe across windows reliably — so changes are relayed explicitly.
+ipcMain.on("vocalis:settingsChanged", (evt, payload) => {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (win.webContents !== evt.sender) {
+      win.webContents.send("vocalis:settingsChanged", payload);
+    }
+  }
+});
+
+ipcMain.handle("vocalis:diagnostics", async () => {
+  const paths = resolvePaths();
+  return [
+    `Vocalis ${app.getVersion()}`,
+    `Electron ${process.versions.electron} · Chromium ${process.versions.chrome}`,
+    `Node ${process.versions.node}`,
+    `${process.platform} ${process.arch} · ${os.release()}`,
+    `Data directory: ${paths.dataDir}`,
+    `Sidecar port: ${serverPort}`,
+    `Packaged: ${app.isPackaged}`,
+  ].join("\n");
+});
+
+/**
+ * Move the data directory.
+ *
+ * Deliberately COPIES and switches without deleting the source. Moving ~700 MB
+ * of irreplaceable voice models is the most destructive thing this app can do,
+ * so the old folder is left intact for the user to remove once they are happy.
+ */
+ipcMain.handle("vocalis:chooseDataDir", async () => {
+  const res = await dialog.showOpenDialog(mainWindow, {
+    title: "Choose where Vocalis keeps your data",
+    properties: ["openDirectory", "createDirectory"],
+    buttonLabel: "Use this folder",
   });
-  settingsWindow.loadURL(`${APP_ORIGIN}/settings.html`);
-  settingsWindow.on("closed", () => { settingsWindow = null; });
-}
+  if (res.canceled || !res.filePaths[0]) return { moved: false, canceled: true };
+
+  const target = res.filePaths[0];
+  const current = resolvePaths().dataDir;
+  if (path.resolve(target) === path.resolve(current)) {
+    return { moved: false, canceled: false, reason: "That is already the current location." };
+  }
+
+  try {
+    for (const name of ["voice_models", "outputs", "training_datasets",
+                        "covers.json", "voices-cache.json"]) {
+      const from = path.join(current, name);
+      if (fs.existsSync(from)) {
+        await fs.promises.cp(from, path.join(target, name), { recursive: true });
+      }
+    }
+  } catch (err) {
+    return { moved: false, canceled: false, error: String(err.message || err) };
+  }
+
+  writePrefs({ dataDir: target });
+  return { moved: true, target, previous: current };
+});
+
+// Only http/https escape the app — never a file: or custom-scheme URL.
+ipcMain.handle("vocalis:openExternal", (_evt, url) => {
+  try {
+    const parsed = new URL(String(url));
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
+    shell.openExternal(parsed.toString());
+    return true;
+  } catch {
+    return false;
+  }
+});
+
+ipcMain.handle("vocalis:relaunch", () => {
+  app.relaunch();
+  app.exit(0);
+});
+
+
 
 // ---------------------------------------------------------------------------
 // Menu bar (§9)
@@ -357,7 +441,7 @@ function buildMenu() {
       submenu: [
         { role: "about" },
         { type: "separator" },
-        { label: "Settings…", accelerator: "CmdOrCtrl+,", click: openSettings },
+        { label: "Settings…", accelerator: "CmdOrCtrl+,", click: () => send("settings") },
         { type: "separator" },
         { role: "services" },
         { type: "separator" },
@@ -369,14 +453,14 @@ function buildMenu() {
     {
       label: "File",
       submenu: [
-        { label: "New Cover", accelerator: "CmdOrCtrl+N", click: () => send("new-cover") },
-        { label: "Train a Voice", accelerator: "CmdOrCtrl+Shift+T", click: () => send("train") },
-        { label: "Import Voice…", click: () => send("import-voice") },
+        { label: "New cover", accelerator: "CmdOrCtrl+N", click: () => send("new-cover") },
+        { label: "Train a voice", accelerator: "CmdOrCtrl+Shift+T", click: () => send("train") },
+        { label: "Import voice…", click: () => send("import-voice") },
         { type: "separator" },
-        { label: "Export Cover", accelerator: "CmdOrCtrl+E", click: () => send("export") },
+        { label: "Export cover", accelerator: "CmdOrCtrl+E", click: () => send("export") },
         ...(isMac ? [] : [
           { type: "separator" },
-          { label: "Settings…", accelerator: "CmdOrCtrl+,", click: openSettings },
+          { label: "Settings…", accelerator: "CmdOrCtrl+,", click: () => send("settings") },
           { role: "quit" },
         ]),
       ],
@@ -397,10 +481,10 @@ function buildMenu() {
         { label: "Covers", accelerator: "CmdOrCtrl+1", click: () => send("covers") },
         { label: "Voices", accelerator: "CmdOrCtrl+2", click: () => send("voices") },
         { type: "separator" },
-        { label: "Show/Hide Inspector", accelerator: "Alt+Command+I", click: () => send("toggle-inspector") },
-        { label: "Show/Hide Sidebar", accelerator: "Control+Command+S", click: () => send("toggle-sidebar") },
+        { label: "Show/hide inspector", accelerator: "Alt+Command+I", click: () => send("toggle-inspector") },
+        { label: "Show/hide sidebar", accelerator: "Control+Command+S", click: () => send("toggle-sidebar") },
         { type: "separator" },
-        { label: "Rescan Library", accelerator: "CmdOrCtrl+R", click: () => send("rescan") },
+        { label: "Rescan library", accelerator: "CmdOrCtrl+R", click: () => send("rescan") },
         ...(IS_DEV ? [
           { type: "separator" },
           { role: "toggleDevTools" },
@@ -467,6 +551,24 @@ ipcMain.handle("vocalis:pickVoiceIndex", async () => {
   return res.canceled ? "" : res.filePaths[0];
 });
 
+ipcMain.handle("vocalis:pickAudioFiles", async (_evt, title) => {
+  const res = await dialog.showOpenDialog(mainWindow, {
+    title: title || "Choose recordings",
+    properties: ["openFile", "multiSelections"],
+    filters: [{ name: "Audio", extensions: ["mp3", "wav", "flac", "m4a", "ogg", "aiff", "aif"] }],
+  });
+  return res.canceled ? [] : res.filePaths;
+});
+
+ipcMain.handle("vocalis:pickAudio", async (_evt, title) => {
+  const res = await dialog.showOpenDialog(mainWindow, {
+    title: title || "Choose an audio file",
+    properties: ["openFile"],
+    filters: [{ name: "Audio", extensions: ["mp3", "wav", "flac", "m4a", "ogg", "aiff", "aif"] }],
+  });
+  return res.canceled ? "" : res.filePaths[0];
+});
+
 ipcMain.handle("vocalis:pickFolder", async () => {
   const res = await dialog.showOpenDialog(mainWindow, {
     title: "Choose a folder of voice samples",
@@ -509,7 +611,195 @@ ipcMain.handle("vocalis:downloadTo", async (_evt, url, destPath) => {
 
 ipcMain.handle("vocalis:revealPath", (_evt, p) => { shell.showItemInFolder(p); });
 
-ipcMain.handle("vocalis:openSettings", () => openSettings());
+// openSettings retired: Settings is a route in the main window now.
+
+// The renderer moved from file:// to app:// during the redesign, and
+// localStorage is per-origin — so the app can no longer read its own pre-redesign
+// coverMeta. It was extracted from Chromium's LevelDB into this file; the
+// renderer merges it with whatever the current origin has and posts both to the
+// migration route exactly once.
+// ---------------------------------------------------------------------------
+// Long-run support (§9)
+// ---------------------------------------------------------------------------
+
+// A cover or a training run can take hours. Native notification on completion,
+// and the display is kept awake for the duration.
+ipcMain.handle("vocalis:notify", (_evt, { title, body, silent } = {}) => {
+  if (!Notification.isSupported()) return false;
+  const n = new Notification({ title, body, silent: Boolean(silent) });
+  // Clicking the notification should bring you to the finished work.
+  n.on("click", () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+      mainWindow.webContents.send("vocalis:command", "show-result");
+    }
+  });
+  n.show();
+  return true;
+});
+
+let sleepBlockerId = null;
+ipcMain.handle("vocalis:preventSleep", (_evt, prevent) => {
+  if (prevent) {
+    if (sleepBlockerId === null) {
+      // display-sleep rather than app-suspension: the machine may dim, but the
+      // run must not be suspended mid-pipeline.
+      sleepBlockerId = powerSaveBlocker.start("prevent-app-suspension");
+    }
+  } else if (sleepBlockerId !== null) {
+    powerSaveBlocker.stop(sleepBlockerId);
+    sleepBlockerId = null;
+  }
+  return sleepBlockerId !== null;
+});
+
+// Read a local audio file for playback in the renderer. Needed for the
+// Original/Cover A/B: the source track sits outside the app:// origin, and the
+// CSP allows blob: but not file:. Capped so a mistaken path cannot pull an
+// arbitrarily large file into the renderer.
+const MAX_INLINE_AUDIO = 200 * 1024 * 1024;
+ipcMain.handle("vocalis:readAudio", async (_evt, filePath) => {
+  try {
+    const stat = await fs.promises.stat(filePath);
+    if (!stat.isFile() || stat.size > MAX_INLINE_AUDIO) return null;
+    const buf = await fs.promises.readFile(filePath);
+    return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+  } catch {
+    return null;
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Finder integration (§9)
+// ---------------------------------------------------------------------------
+
+// startDrag refuses an empty icon, so keep one tiny transparent PNG around
+// rather than building a nativeImage per drag.
+let DRAG_ICON = null;
+function dragIcon() {
+  if (!DRAG_ICON) {
+    DRAG_ICON = nativeImage.createFromDataURL(
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAHElEQVQ4y2NgGAWjYBSMglEwCkbBKBgFo2AUAAAGgAABmm0aBwAAAABJRU5ErkJggg=="
+    );
+  }
+  return DRAG_ICON;
+}
+
+// Drag one or many covers straight out to Finder.
+ipcMain.on("vocalis:startDrag", (evt, filePaths) => {
+  const files = (Array.isArray(filePaths) ? filePaths : [filePaths])
+    .filter((p) => typeof p === "string" && fs.existsSync(p));
+  if (!files.length) return;
+  evt.sender.startDrag({ files, file: files[0], icon: dragIcon() });
+});
+
+// Quick Look (Space on a selected row). macOS only; qlmanage is the supported
+// way to drive the panel from outside AppKit.
+ipcMain.handle("vocalis:quickLook", (_evt, filePath) => {
+  if (process.platform !== "darwin" || !filePath || !fs.existsSync(filePath)) return false;
+  try {
+    spawn("qlmanage", ["-p", filePath], { detached: true, stdio: "ignore" }).unref();
+    return true;
+  } catch {
+    return false;
+  }
+});
+
+/**
+ * Export one or many covers. A single file gets a Save dialog so it can be
+ * renamed; several get a folder picker, because naming each one in turn is a
+ * worse experience than choosing a destination once.
+ */
+ipcMain.handle("vocalis:exportFiles", async (_evt, items) => {
+  const list = (items || []).filter((i) => i?.path && fs.existsSync(i.path));
+  if (!list.length) return { exported: 0, canceled: false };
+
+  if (list.length === 1) {
+    const res = await dialog.showSaveDialog(mainWindow, {
+      title: "Export cover",
+      defaultPath: list[0].name,
+      filters: [{ name: "Audio", extensions: [path.extname(list[0].name).slice(1) || "mp3"] }],
+    });
+    if (res.canceled || !res.filePath) return { exported: 0, canceled: true };
+    await fs.promises.copyFile(list[0].path, res.filePath);
+    return { exported: 1, canceled: false, destination: res.filePath };
+  }
+
+  const res = await dialog.showOpenDialog(mainWindow, {
+    title: `Export ${list.length} covers`,
+    properties: ["openDirectory", "createDirectory"],
+    buttonLabel: "Export",
+  });
+  if (res.canceled || !res.filePaths[0]) return { exported: 0, canceled: true };
+
+  const dir = res.filePaths[0];
+  let exported = 0;
+  for (const item of list) {
+    // Never silently overwrite: disambiguate with a numeric suffix.
+    let dest = path.join(dir, item.name);
+    let n = 2;
+    while (fs.existsSync(dest)) {
+      const ext = path.extname(item.name);
+      dest = path.join(dir, `${path.basename(item.name, ext)} ${n++}${ext}`);
+    }
+    await fs.promises.copyFile(item.path, dest);
+    exported++;
+  }
+  return { exported, canceled: false, destination: dir };
+});
+
+ipcMain.handle("vocalis:legacyCoverMeta", () => {
+  try {
+    const file = path.join(path.resolve(__dirname, ".."), ".migration", "legacy-localstorage.json");
+    const blob = JSON.parse(fs.readFileSync(file, "utf8"));
+    return Object.values(blob).reduce(
+      (acc, origin) => Object.assign(acc, origin.coverMeta || {}), {});
+  } catch {
+    return {};   // nothing to recover is a normal outcome, not an error
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Waveform peak cache
+// ---------------------------------------------------------------------------
+// Decoding a 3-minute MP3 to draw a 40px thumbnail costs ~200ms and a few MB.
+// Doing that for 22 rows on every render is untenable, so peaks are computed
+// once and persisted. Keyed by name+size+mtime so a regenerated file re-decodes.
+const PEAKS_FILE = () => path.join(app.getPath("userData"), "peaks-cache.json");
+let peaksCache = null;
+
+function readPeaksCache() {
+  if (peaksCache) return peaksCache;
+  try {
+    peaksCache = JSON.parse(fs.readFileSync(PEAKS_FILE(), "utf8"));
+  } catch {
+    peaksCache = {};
+  }
+  return peaksCache;
+}
+
+let peaksWriteTimer = null;
+function schedulePeaksWrite() {
+  clearTimeout(peaksWriteTimer);
+  // Coalesce the burst of writes that happens as a library first renders.
+  peaksWriteTimer = setTimeout(() => {
+    try {
+      const tmp = PEAKS_FILE() + ".tmp";
+      fs.writeFileSync(tmp, JSON.stringify(peaksCache));
+      fs.renameSync(tmp, PEAKS_FILE());   // atomic
+    } catch (err) {
+      console.error("[peaks] write failed:", err);
+    }
+  }, 400);
+}
+
+ipcMain.handle("vocalis:peaksGet", (_evt, key) => readPeaksCache()[key] ?? null);
+
+ipcMain.handle("vocalis:peaksPut", (_evt, key, value) => {
+  readPeaksCache()[key] = value;
+  schedulePeaksWrite();
+});
 
 // Dock progress bar (§9) — driven by training and cover generation.
 // value is 0..1; anything outside that range clears the indicator.

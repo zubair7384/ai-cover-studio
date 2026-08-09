@@ -43,6 +43,9 @@ const state = {
   loading: { covers: true, voices: true },
   error: { covers: null, voices: null },
 
+  // Rows hidden pending an undoable delete (§Prompt 7 toasts).
+  pendingDelete: [],
+
   // selection + search
   selection: [],            // ids of selected rows in the active view
   query: "",
@@ -50,12 +53,16 @@ const state = {
   // playback — the player bar mounts only when this is set
   nowPlaying: null,         // { id, title, voice, src, originalSrc? }
 
+  // Settings carried from a cover's detail sheet into New cover.
+  coverDraft: null,
+
   // long-running jobs (Prompt 4/5 populate this; the sidebar reads it)
   jobs: [],                 // [{ id, kind, name, progress, stage }]
 
   // chrome
   sidebarWidth: persisted("sidebarWidth", 220),
   sidebarVisible: persisted("sidebarVisible", true),
+  inspectorVisible: persisted("inspectorVisible", true),   // ⌥⌘I
   profile: persisted("profile", null),   // { name, avatar }
   appVersion: "",
 };
@@ -110,6 +117,11 @@ export function setSidebarWidth(px) {
 export function setSidebarVisible(visible) {
   persist("sidebarVisible", !!visible);
   set({ sidebarVisible: !!visible });
+}
+
+export function setInspectorVisible(visible) {
+  persist("inspectorVisible", !!visible);
+  set({ inspectorVisible: !!visible });
 }
 
 export function setProfile(profile) {

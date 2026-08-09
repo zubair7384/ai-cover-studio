@@ -7,10 +7,12 @@
 
 import { $ } from "../lib/dom.js";
 import { apply as applyTheme } from "./theme.js";
+import { setProfile } from "./store.js";
 import { migrateFromAuth } from "./profile.js";
 import { init as initApi, loadCovers, loadVoices, rescan } from "./api.js";
+import { migrateCoverMetadata } from "./migrate.js";
 import { Shell } from "./shell.js";
-import { getState, set, setSidebarVisible } from "./store.js";
+import { getState, set, setSidebarVisible, setInspectorVisible } from "./store.js";
 import { navigate, handleEscape, exitFlow } from "./router.js";
 
 applyTheme();
@@ -23,6 +25,9 @@ root.appendChild(shell);
 /* ---- data --------------------------------------------------------------- */
 
 initApi()
+  // The migration must land before the first load, or the library renders once
+  // with stub records and then jumps.
+  .then(() => migrateCoverMetadata())
   .then(() => Promise.all([loadCovers(), loadVoices()]))
   .catch((err) => {
     // The sidecar is started before the window loads, so this only fires if it
@@ -65,15 +70,26 @@ window.vocalis.onCommand?.((command) => {
   switch (command) {
     case "covers":        navigate("covers"); break;
     case "voices":        navigate("voices"); break;
+    case "settings":      navigate("settings"); break;
     case "new-cover":     navigate("new-cover"); break;
     case "train":         navigate("train"); break;
     case "toggle-sidebar": shell.toggleSidebar(); break;
+    case "toggle-inspector":
+      setInspectorVisible(!getState().inspectorVisible);
+      break;
     case "search":        shell.focusSearch(); break;
     case "rescan":        rescan(); break;
     case "play-pause":    shell.togglePlayback(); break;
     case "cancel-flow":   exitFlow(); break;
     default: break;
   }
+});
+
+// Settings lives in another window with its own memory, so its writes are
+// relayed here rather than being picked up by polling localStorage.
+window.vocalis.onSettingsChanged?.(({ key, value }) => {
+  if (key === "theme" || key === "accent") applyTheme();
+  else if (key === "profile") setProfile(value);
 });
 
 // Handy during development; harmless in a packaged build.

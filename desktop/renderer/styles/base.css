@@ -51,11 +51,20 @@ body {
 
 /* Controls do not inherit font by default in WebKit. */
 button, input, select, textarea { font: inherit; color: inherit; }
-button { background: none; cursor: pointer; }
+/* `button` is not in the element reset above (it must keep its own box model),
+   so it needs its border zeroed explicitly. Without this every bare <button> —
+   sidebar rows, menu items, segmented options — draws the UA default border and
+   reads as permanently outlined. */
+button { background: none; border: 0; cursor: pointer; }
 a { color: var(--accent-text); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
 ::selection { background: var(--tint); }
+
+/* The UA rule for [hidden] is a plain `display: none`, which loses to any
+   explicit display on the element — so a flex component stays visible when
+   hidden is set. This makes the attribute mean what it says, everywhere. */
+[hidden] { display: none !important; }
 
 /* ---- Type scale utilities (§4) ------------------------------------------ */
 

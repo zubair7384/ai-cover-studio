@@ -19,7 +19,11 @@ export function Toolbar() {
   });
   search.classList.add("toolbar__search");
 
+  // Flows put Cancel to the LEFT of the title; library views leave it empty.
+  const leading = el("div", { class: "toolbar__leading" });
+
   const root = el("header", { class: "toolbar drag-region" },
+    leading,
     title,
     el("div", { class: "toolbar__spacer" }),
     search,
@@ -30,9 +34,12 @@ export function Toolbar() {
    * Views call this to declare their toolbar.
    * @param {{title: string, actions?: Node[], search?: boolean}} config
    */
-  root.configure = ({ title: text, actions: nodes = [], search: showSearch = true }) => {
+  root.configure = ({ title: text, actions: nodes = [], search: showSearch = true,
+                     leading: lead = null }) => {
     title.textContent = text;
     search.hidden = !showSearch;
+    leading.innerHTML = "";
+    if (lead) leading.appendChild(lead);
     actions.innerHTML = "";
     nodes.forEach((n) => actions.appendChild(n));
   };

@@ -41,9 +41,20 @@ export const api = {
   health: () => json("/api/health"),
 
   covers: () => json("/api/outputs"),
-  deleteCover: (name) => post("/api/outputs/delete", { name }),
+  migrateCovers: (coverMeta) => post("/api/outputs/migrate", { coverMeta }),
+  renameCover: (id, title) => post("/api/outputs/title", { id, title }),
+  relocateCover: (id, path) => post("/api/outputs/relocate", { id, path }),
+  /** trashFile:false forgets the record but leaves the file where it is. */
+  deleteCover: (id, trashFile = true) => post("/api/outputs/delete", { id, trashFile }),
+
+  storage: () => json("/api/storage"),
+  deleteAllCovers: (trashFiles = true) => post("/api/outputs/delete-all", { trashFiles }),
 
   voices: () => json("/api/models/meta"),
+  previewUrl: (name) => `${base}/api/models/preview/${encodeURIComponent(name)}`,
+  createPreview: (modelName, referencePath) =>
+    post("/api/models/preview", { model_name: modelName, reference_path: referencePath }),
+  importModels: (paths) => post("/api/models/import", { paths }),
   renameVoice: (from, to) => post("/api/models/rename", { from, to }),
   deleteVoice: (name) => post("/api/models/delete", { name }),
 
@@ -90,4 +101,33 @@ export async function loadVoices() {
 /** ⌘R — rescan both libraries (§9). */
 export function rescan() {
   return Promise.all([loadCovers(), loadVoices()]);
+}
+
+/**
+ * Drive a backend job to completion over its SSE stream.
+ *
+ * @param {string} jobId
+ * @param {{onProgress?: Function, onLog?: Function}} [handlers]
+ * @returns {Promise<object>} the job result, or rejects with the failure message
+ */
+export function runJob(jobId, { onProgress, onLog } = {}) {
+  return new Promise((resolve, reject) => {
+    const source = api.jobEvents(jobId);
+
+    source.onmessage = (evt) => {
+      let msg;
+      try { msg = JSON.parse(evt.data); } catch { return; }
+
+      if (msg.type === "progress") onProgress?.(msg.fraction, msg.step, msg.note);
+      else if (msg.type === "log") onLog?.(msg.line);
+      else if (msg.type === "done") { source.close(); resolve(msg.result || {}); }
+      else if (msg.type === "error") { source.close(); reject(new Error(msg.message)); }
+    };
+
+    // A dropped stream must not leave the caller hanging forever.
+    source.onerror = () => {
+      source.close();
+      reject(new Error("Lost contact with the local engine."));
+    };
+  });
 }

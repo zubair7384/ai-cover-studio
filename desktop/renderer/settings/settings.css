@@ -1,0 +1,116 @@
+/* ============================================================================
+   Settings window — Prompt 6.
+   620 wide, non-resizable, height driven by the active tab.
+   ========================================================================== */
+
+/* These styles now load inside the main window, so they must not claim the
+   document: no body rules, no 100vh. The page supplies its own container. */
+
+.settings__body { padding: var(--sp-6) 0 var(--sp-7); }
+
+.stab { display: flex; flex-direction: column; gap: var(--sp-6); }
+
+/* ---- Groups ------------------------------------------------------------- */
+
+.sgroup { display: flex; flex-direction: column; gap: var(--sp-2); }
+.sgroup__title { color: var(--text-tertiary); }
+.sgroup__body {
+  display: flex; flex-direction: column; gap: var(--sp-4);
+  padding: var(--pad-card);
+  background: var(--bg-raised);
+  border: var(--border-1);
+  border-radius: var(--r-card);
+}
+
+.srow { display: flex; align-items: center; gap: var(--sp-4); }
+.srow__label { flex: 1; min-width: 0; }
+.srow__control { flex: none; width: 220px; }
+.srow__note { color: var(--text-secondary); }
+
+/* ---- Profile ------------------------------------------------------------ */
+
+.profile { display: flex; gap: var(--sp-4); align-items: flex-start; }
+.avatar--lg {
+  width: 48px; height: 48px;
+  font-size: var(--t-title-2-size);
+  flex: none;
+}
+.profile__fields { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--sp-3); }
+.profile__actions { display: flex; align-items: center; gap: var(--sp-2); }
+
+/* Replaces the old explicit "Save profile" button. */
+.saved {
+  color: var(--ok-text);
+  opacity: 0;
+  transition: opacity var(--dur-panel) var(--ease-exit);
+}
+.saved--on { opacity: 1; }
+
+/* ---- Exporting ---------------------------------------------------------- */
+
+.exportrow { display: flex; align-items: flex-start; gap: var(--sp-2); }
+.exportrow .field { flex: 1; min-width: 0; }
+
+/* ---- Storage ------------------------------------------------------------ */
+
+.storagerow { display: flex; flex-direction: column; gap: var(--sp-2); }
+.storagerow__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-3); }
+.storagerow__head span:last-child { color: var(--text-secondary); }
+.storagerow__total {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--hairline);
+}
+
+.pathrow { min-width: 0; }
+.pathrow__value {
+  display: block;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  direction: rtl; text-align: left;   /* keep the tail of the path visible */
+}
+.pathrow__actions { display: flex; gap: var(--sp-2); }
+
+/* ---- About -------------------------------------------------------------- */
+
+.stab--about { align-items: center; text-align: center; gap: var(--sp-3); }
+
+/* The wordmark glyph at 64px, standing in for an app icon. */
+.aboutmark {
+  display: flex; align-items: center; gap: 4px;
+  height: 64px;
+  /* Amber is reserved for live signals (§2); the app mark is not one. */
+  color: var(--text-tertiary);
+}
+.aboutmark i { width: 6px; border-radius: 3px; background: currentColor; display: block; }
+
+.about__line { color: var(--text-secondary); }
+.about__links { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--sp-2); }
+.about__credit { color: var(--text-tertiary); }
+
+/* ---- Accent swatches ---------------------------------------------------- */
+
+.accentrow { display: flex; align-items: center; gap: var(--sp-4); }
+.accentrow .srow__label { flex: 1; min-width: 0; }
+
+.swatches { display: flex; gap: var(--sp-2); flex: none; }
+
+.swatch {
+  width: 28px; height: 28px;
+  border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  /* The ring is drawn with box-shadow so the swatch itself stays a clean
+     circle of the colour it represents. */
+  box-shadow: inset 0 0 0 1px var(--hairline-strong);
+  transition: box-shadow var(--dur-press) var(--ease-exit);
+}
+.swatch__dot {
+  width: 18px; height: 18px;
+  border-radius: 999px;
+  background: var(--swatch);
+}
+.swatch:hover { box-shadow: inset 0 0 0 1px var(--text-tertiary); }
+.swatch--on {
+  box-shadow: 0 0 0 2px var(--bg-raised), 0 0 0 4px var(--swatch);
+}

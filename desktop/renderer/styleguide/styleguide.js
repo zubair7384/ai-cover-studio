@@ -105,7 +105,7 @@ function gallery() {
       Button({ label: "Prominent", variant: "primary", size: "lg" }),
     ),
     row("With icon",
-      Button({ label: "New Cover", variant: "primary", icon: "plus" }),
+      Button({ label: "New cover", variant: "primary", icon: "plus" }),
       Button({ label: "Import", variant: "secondary", icon: "import" }),
       Button({ label: "Sort", variant: "tertiary", iconEnd: "chevron-down" }),
     ),
@@ -248,7 +248,7 @@ function gallery() {
       icon: "waveform",
       title: "No covers yet",
       body: "Pick a song and a voice, and Vocalis does the rest.",
-      action: Button({ label: "New Cover", variant: "primary" }),
+      action: Button({ label: "New cover", variant: "primary" }),
     }),
   ));
 
@@ -274,7 +274,7 @@ function gallery() {
   const ctxTarget = el("div", { class: "sg__ctx t-caption" }, "Right-click anywhere in this box");
   ctxTarget.addEventListener("contextmenu", (e) => ContextMenu(e, [
     { label: "Play", icon: "play" },
-    { label: "Get Info", icon: "info" },
+    { label: "Get info", icon: "info" },
     { separator: true },
     { label: "Delete", icon: "trash", destructive: true },
   ]));

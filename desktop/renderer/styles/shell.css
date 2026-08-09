@@ -23,9 +23,13 @@
   flex-direction: column;
   min-width: 0;
   overflow: hidden;
-  /* Transparent so the window's AppKit 'sidebar' material shows through.
-     .vibrant is what base.css swaps to solid under reduced-transparency. */
-  background: transparent;
+  /* §5 asks for the sidebar to sit on the vibrancy material. In practice the
+     window's backgroundColor is opaque (#181A1C), so nothing shows through and
+     a transparent sidebar is indistinguishable from the content area. It
+     therefore carries the documented fallback surface as its base — the same
+     value prefers-reduced-transparency uses — plus a hairline to divide it. */
+  background: var(--bg-sidebar-fallback);
+  border-right: 1px solid var(--hairline);
 }
 #shell[data-sidebar="hidden"] .sidebar { display: none; }
 
@@ -41,7 +45,9 @@
 }
 
 .wordmark { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
-.wordmark__glyph { display: flex; align-items: center; gap: 2px; height: 16px; color: var(--accent); }
+/* Graphite, not amber: the mark is branding, not a live signal. Keeping it
+   amber pushed Covers to four amber elements, over the §2 limit of three. */
+.wordmark__glyph { display: flex; align-items: center; gap: 2px; height: 16px; color: var(--text-tertiary); }
 .wordmark__glyph i { width: 2px; border-radius: 1px; background: currentColor; display: block; }
 .wordmark__name { color: var(--text-primary); white-space: nowrap; }
 .wordmark__badge {
@@ -84,6 +90,8 @@
 .nav-row__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nav-row__shortcut { flex: none; color: var(--text-tertiary); }
 
+/* Resting is transparent with no border of any kind; the UA button border is
+   zeroed in base.css. Exactly one row carries --on at a time. */
 .nav-row--on {
   background: var(--tint);
   color: var(--text-primary);
@@ -91,9 +99,37 @@
 }
 .nav-row--on .nav-row__icon { color: var(--accent); }
 
+/* While a flow is pushed over the library, the place you will return to stays
+   marked — quieter, but not blank, so the sidebar never looks dead. */
+.nav-row--under { color: var(--text-primary); }
+.nav-row--under::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 4px; bottom: 4px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--gr-600);
+}
+/* 2px amber left rail, matching the list-row selection language (§6). */
+.nav-row--on::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 4px; bottom: 4px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
 /* Activity rows carry a 14px ring instead of an icon. */
 .nav-row__ring { flex: none; display: inline-flex; }
 .nav-row__pct { flex: none; color: var(--text-secondary); }
+
+/* Settings sits above the account row rather than in a section of its own —
+   §8 removed the old one-item "App" section as dead weight in the IA. */
+.sidebar__footer-nav {
+  flex: none;
+  padding: 0 var(--sp-2) var(--sp-2);
+}
 
 /* ---- Account row -------------------------------------------------------- */
 
@@ -160,7 +196,10 @@
 .toolbar__spacer { flex: 1; }
 .toolbar__actions { flex: none; display: flex; align-items: center; gap: var(--sp-2); }
 .toolbar__search { width: 200px; }
-.toolbar__search .field__error { display: none; }
+/* Controls in the toolbar are bare: no label, no help text, and the error slot
+   must not reserve height in a 52px bar. */
+.toolbar .field { gap: 0; }
+.toolbar .field__error, .toolbar .field__help { display: none; }
 
 .scroll {
   overflow-y: auto;
@@ -168,9 +207,28 @@
   padding: 0 var(--pad-window) var(--pad-window);
 }
 
+/* The window can be any width; the content must not be. Without this, a row's
+   metadata ends up stranded a thousand pixels from the title it belongs to. */
+.column {
+  max-width: var(--content-max);
+  margin: 0 auto;
+  width: 100%;
+}
+
 /* ---- List rows (§6) ----------------------------------------------------- */
 
 .list { display: flex; flex-direction: column; }
+
+/* Sticky date headers — Today / Yesterday / This Week / July 2026 (Prompt 2). */
+.group-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: var(--sp-3) var(--sp-2) var(--sp-1);
+  background: var(--bg-content);
+  color: var(--gr-400);
+}
+
 .row {
   display: flex;
   align-items: center;
@@ -207,6 +265,42 @@
 .row__trail { flex: none; display: flex; align-items: center; gap: var(--sp-1); opacity: 0; }
 .row:hover .row__trail, .row--on .row__trail, .row:focus-within .row__trail { opacity: 1; }
 
+/* Prompt 2: cover rows are 56px. Prompt 3: voice rows are 60px. */
+.row--cover { height: 56px; }
+.row--voice { height: 60px; }
+
+/* 40x40 rounded-8 tile. Solid --gr-750 ground shows through until peaks land,
+   so an unloaded tile reads as a block, never as a stray rule. */
+.wave-thumb {
+  flex: none;
+  border-radius: var(--r-card);
+  background: var(--gr-750);
+  overflow: hidden;
+}
+.wave-thumb canvas { width: 100%; height: 100%; }
+
+/* Voice tile — same 40x40 footprint, flat fill, initial centred. */
+.voice-tile {
+  flex: none;
+  width: 40px; height: 40px;
+  border-radius: var(--r-card);
+  background: var(--gr-750);
+  color: var(--gr-200);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: var(--t-head-size);
+  font-weight: var(--t-body-em-weight);
+}
+
+/* Title line: name and its badge travel together, not at opposite window edges. */
+.row__titleline {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.row__titleline .row__title { flex: 0 1 auto; }
+.row__titleline .badge { flex: none; }
+
 .list__footer {
   padding: var(--sp-3) var(--sp-2) 0;
   color: var(--text-secondary);
@@ -214,6 +308,9 @@
 
 /* ---- Player bar (§8) ---------------------------------------------------- */
 
+/* display:flex would otherwise beat the UA [hidden] rule, leaving a dead
+   scrubber on screen. The bar is also only mounted once a cover is loaded. */
+.player[hidden] { display: none; }
 .player {
   height: var(--player-h);
   flex: none;
@@ -255,3 +352,418 @@
 .sidebar__top button, .sidebar__top a,
 .toolbar button, .toolbar input, .toolbar select, .toolbar a,
 .toolbar [tabindex] { -webkit-app-region: no-drag; }
+
+/* ---- Missing files (§Prompt 7) ------------------------------------------ */
+/* An output moved or deleted outside the app is flagged, never hidden. */
+
+.row__missing { display: inline-flex; color: var(--err-text); flex: none; }
+.row--missing .row__title { color: var(--text-secondary); }
+.row--missing .wave-thumb { opacity: 0.45; }
+
+.list__pad { padding: var(--sp-8) 0; text-align: center; }
+
+/* ---- Cover detail sheet ------------------------------------------------- */
+
+.detail { display: flex; flex-direction: column; gap: var(--sp-4); }
+
+.detail__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-3) var(--sp-5);
+}
+.detail__field { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.detail__label { color: var(--text-secondary); }
+.detail__unknown { color: var(--text-tertiary); }
+
+.detail__path {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--hairline);
+  min-width: 0;
+}
+.detail__pathvalue {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;          /* keep the filename visible when the path is long */
+  text-align: left;
+}
+
+/* The sheet is wider than the default to fit the parameter grid. */
+.scrim:has(.detail) .sheet { width: min(620px, 100%); }
+
+/* ---- Voices (Prompt 3) -------------------------------------------------- */
+
+/* Inline preview. Sits inside the row, never in the global player bar —
+   auditioning a voice must not evict whatever cover you were listening to. */
+.row__preview:not(:empty) { padding-top: var(--sp-1); }
+.row__preview .meter { width: 100%; }
+
+/* A row grows to fit its preview rather than clipping it. */
+.row--voice:has(.row__preview:not(:empty)) { height: auto; padding-block: var(--sp-2); }
+
+/* Empty states may carry two equal-weight paths (train / import). */
+.empty__actions { display: flex; gap: var(--sp-2); align-items: center; }
+
+/* The quiet library summary sits above the list, per Prompt 3. */
+.list__lead {
+  color: var(--text-secondary);
+  padding: 0 var(--sp-2) var(--sp-2);
+}
+.list__lead:empty { display: none; }
+
+/* ============================================================================
+   New cover (Prompt 4)
+   ========================================================================== */
+
+.toolbar__leading { flex: none; display: flex; align-items: center; gap: var(--sp-2); }
+.toolbar__leading:empty { display: none; }
+
+/* Split: scrolling main column + fixed inspector. Nothing sticky sits over the
+   scrolling column, which is what fixed the old CTA-clipping-parameters bug. */
+.flow__split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--inspector-w);
+  gap: var(--sp-6);
+  align-items: start;
+  min-height: 100%;
+}
+.flow__split[data-inspector="hidden"] { grid-template-columns: minmax(0, 1fr); }
+.flow__split[data-inspector="hidden"] .inspector { display: none; }
+
+.flow__main {
+  max-width: var(--content-max);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding-top: var(--sp-2);
+}
+.flow__heading { color: var(--text-secondary); }
+.flow__section { min-width: 0; }
+
+/* ---- Drop zone ---------------------------------------------------------- */
+
+.dropzone {
+  height: 160px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: var(--sp-2);
+  border: 1px dashed var(--gr-600);
+  border-radius: var(--r-card);
+  color: var(--text-secondary);
+  background: transparent;
+  transition: border-color var(--dur-press) var(--ease-exit),
+              background-color var(--dur-press) var(--ease-exit);
+}
+.dropzone:hover { border-color: var(--gr-500); }
+.dropzone__icon { color: var(--gr-500); }
+.dropzone__hint { color: var(--text-tertiary); }
+
+/* A drag anywhere in the view lights the zone, not just a drag over it. */
+.flow--dragging .dropzone { border-color: var(--accent); background: var(--tint); }
+
+/* ---- Collapsed song row ------------------------------------------------- */
+
+.songrow {
+  height: 72px;
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: 0 var(--sp-3);
+  background: var(--bg-raised);
+  border: var(--border-1);
+  border-radius: var(--r-card);
+}
+.songrow__main { flex: 1; min-width: 0; }
+.songrow__meta { color: var(--text-secondary); }
+
+/* ---- Voice picker ------------------------------------------------------- */
+
+.voicerow {
+  width: 100%;
+  height: 44px;
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: 0 var(--sp-3);
+  background: var(--bg-raised);
+  border: var(--border-1);
+  border-radius: var(--r-card);
+  color: var(--text-primary);
+  text-align: left;
+}
+.voicerow:hover { background: var(--bg-panel); }
+.voicerow__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.voicerow__chevron { color: var(--text-secondary); display: inline-flex; }
+
+.voicepick { min-width: 260px; display: flex; flex-direction: column; }
+.voicepick__row {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--r-control);
+  color: var(--text-primary);
+  text-align: left;
+}
+.voicepick__row:hover { background: var(--bg-control); }
+.voicepick__row--on { background: var(--tint); }
+.voicepick__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.voicepick__empty { padding: var(--sp-3) var(--sp-2); color: var(--text-tertiary); }
+.voicepick__footer {
+  margin-top: var(--sp-1);
+  padding-top: var(--sp-1);
+  border-top: 1px solid var(--hairline);
+}
+.voice-tile--sm { width: 22px; height: 22px; font-size: var(--t-caption-size); border-radius: var(--r-chip); }
+
+/* ---- Run / result panel ------------------------------------------------- */
+
+.runpanel {
+  display: flex; flex-direction: column; gap: var(--sp-4);
+  padding: var(--pad-card);
+  background: var(--bg-panel);
+  border: var(--border-2);
+  border-radius: var(--r-card);
+}
+.runpanel__foot { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.runpanel__note { color: var(--text-secondary); }
+.runpanel__actions { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.runpanel--failed { border-color: var(--err-500); }
+.runpanel__failhead { display: flex; align-items: center; gap: var(--sp-2); color: var(--err-text); }
+
+/* ---- Inspector (§6) ----------------------------------------------------- */
+
+.inspector {
+  position: sticky;
+  top: 0;
+  width: var(--inspector-w);
+  align-self: start;
+  background: var(--bg-raised);
+  border: var(--border-1);
+  border-radius: var(--r-card);
+}
+.inspector__body {
+  display: flex; flex-direction: column; gap: var(--sp-5);
+  padding: var(--pad-card);
+}
+.inspector__advanced summary { cursor: pointer; color: var(--text-secondary); }
+.inspector__advanced[open] summary { margin-bottom: var(--sp-3); }
+
+/* At the 900px minimum width the inspector would squeeze the main column to
+   nothing, so it drops below instead of clipping. */
+@media (max-width: 1040px) {
+  .flow__split { grid-template-columns: minmax(0, 1fr); }
+  .inspector { position: static; width: 100%; }
+}
+
+/* ============================================================================
+   Train a voice (Prompt 5)
+   ========================================================================== */
+
+.flow__headingrow { display: flex; align-items: center; gap: var(--sp-1); }
+.flow__grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4); }
+
+/* ---- Material meter ----------------------------------------------------- */
+/* The most useful feedback on the screen: how much material there is against
+   the range that actually works. */
+
+.material {
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  padding: var(--pad-card);
+  background: var(--bg-raised);
+  border: var(--border-1);
+  border-radius: var(--r-card);
+  margin-bottom: var(--sp-2);
+}
+.material__hint { color: var(--text-secondary); }
+
+/* ---- Clip list ---------------------------------------------------------- */
+
+.cliplist { display: flex; flex-direction: column; }
+.clip {
+  display: flex; align-items: center; gap: var(--sp-3);
+  min-height: var(--row-list);
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--r-control);
+}
+.clip:hover { background: var(--bg-raised); }
+.clip__main { flex: 1; min-width: 0; }
+.clip__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clip__meta { flex: none; color: var(--text-secondary); }
+.clip__warn {
+  display: flex; align-items: center; gap: var(--sp-1);
+  color: var(--err-text);
+}
+.cliplist__actions { display: flex; gap: var(--sp-2); padding-top: var(--sp-2); }
+
+.tips { display: flex; flex-direction: column; gap: var(--sp-1); }
+.tips li { color: var(--text-secondary); padding-left: var(--sp-3); position: relative; }
+.tips li::before { content: "·"; position: absolute; left: var(--sp-1); }
+
+/* ---- Quality presets ---------------------------------------------------- */
+
+.presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-3); }
+.preset {
+  display: flex; flex-direction: column; gap: var(--sp-1);
+  padding: var(--pad-card);
+  text-align: left;
+  background: var(--bg-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-card);
+  color: var(--text-primary);
+  transition: border-color var(--dur-press) var(--ease-exit),
+              background-color var(--dur-press) var(--ease-exit);
+}
+.preset:hover { border-color: var(--hairline-strong); }
+.preset--on { border-color: var(--accent); background: var(--tint); }
+.preset__epochs { color: var(--text-secondary); }
+.preset__time { color: var(--text-primary); }   /* an estimate, not a live value */
+.preset__blurb { color: var(--text-secondary); }
+
+.quality__manual { margin-top: var(--sp-4); }
+.quality__manual summary { cursor: pointer; color: var(--text-secondary); }
+.quality__manual[open] summary { margin-bottom: var(--sp-3); }
+
+/* Inline, above Start — never a banner. */
+.commit { color: var(--text-secondary); padding-top: var(--sp-2); }
+
+/* ---- Live training panel ------------------------------------------------ */
+/* Mounts only once training starts; there is no empty log box before that. */
+
+.trainpanel {
+  position: sticky; top: 0; align-self: start;
+  width: var(--inspector-w);
+  display: flex; flex-direction: column; gap: var(--sp-3);
+  padding: var(--pad-card);
+  background: var(--bg-raised);
+  border: var(--border-1);
+  border-radius: var(--r-card);
+}
+.trainpanel[hidden] { display: none; }
+.trainpanel__elapsed, .trainpanel__losshead { color: var(--text-secondary); }
+.trainpanel__actions { display: flex; flex-direction: column; gap: var(--sp-2); }
+.trainpanel__log summary { cursor: pointer; color: var(--text-secondary); }
+.logbox__bar { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); padding: var(--sp-2) 0; }
+
+.logbox {
+  max-height: 240px;
+  overflow: auto;
+  padding: var(--sp-2);
+  background: var(--bg-well);
+  border-radius: var(--r-chip);
+  font-size: var(--t-caption-size);
+  line-height: 1.5;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@media (max-width: 1040px) {
+  .trainpanel { position: static; width: 100%; }
+  .presets { grid-template-columns: 1fr; }
+  .flow__grid2 { grid-template-columns: 1fr; }
+}
+
+/* ============================================================================
+   States, onboarding, toasts (Prompt 7)
+   ========================================================================== */
+
+/* ---- Loading ------------------------------------------------------------ */
+
+.loadingrows { display: flex; flex-direction: column; }
+.loadingrow {
+  display: flex; align-items: center; gap: var(--sp-3);
+  height: 56px;
+  padding: 0 var(--sp-2);
+}
+.loadingrow__text { flex: 1; display: flex; flex-direction: column; gap: var(--sp-2); }
+
+/* ---- Error -------------------------------------------------------------- */
+/* States what happened and what to do. Never apologises, never shows a trace. */
+
+.errorpanel {
+  display: flex; flex-direction: column; gap: var(--sp-3);
+  padding: var(--pad-card);
+  background: var(--bg-raised);
+  border: 1px solid var(--err-500);
+  border-radius: var(--r-card);
+  margin: var(--sp-5) 0;
+}
+.errorpanel__head { display: flex; align-items: center; gap: var(--sp-2); color: var(--err-text); }
+.errorpanel__body { color: var(--text-secondary); }
+.errorpanel__actions { display: flex; gap: var(--sp-2); align-items: center; }
+
+/* ---- Missing files ------------------------------------------------------ */
+
+.row__trail--always { opacity: 1; }
+
+/* ---- First launch ------------------------------------------------------- */
+/* A panel in the content area, not a modal. Three elements, no carousel. */
+
+.firstrun {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: var(--sp-4);
+  padding: var(--sp-9) var(--sp-5);
+  text-align: center;
+}
+.firstrun__lede { color: var(--text-secondary); }
+.firstrun__paths {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 240px));
+  gap: var(--sp-3);
+  margin: var(--sp-3) 0;
+}
+.firstrun__card {
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  align-items: flex-start;
+  padding: var(--pad-card);
+  background: var(--bg-raised);
+  border: var(--border-1);
+  border-radius: var(--r-card);
+  text-align: left;
+}
+.firstrun__blurb { color: var(--text-secondary); flex: 1; }
+
+@media (max-width: 640px) {
+  .firstrun__paths { grid-template-columns: 1fr; }
+}
+
+/* ---- Toasts ------------------------------------------------------------- */
+/* Bottom-centre, above the player bar. One at a time. */
+
+#toast-host {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--player-h) + var(--sp-4));
+  transform: translateX(-50%);
+  z-index: 1200;
+  pointer-events: none;
+}
+.toast {
+  display: flex; align-items: center; gap: var(--sp-3);
+  min-height: 44px;
+  padding: 0 var(--sp-2) 0 var(--sp-4);
+  background: var(--bg-sheet);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-3);
+  color: var(--text-primary);
+  pointer-events: auto;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity var(--dur-panel) var(--ease-enter),
+              transform var(--dur-panel) var(--ease-enter);
+}
+.toast--in { opacity: 1; transform: translateY(0); }
+.toast__text { white-space: nowrap; }
+
+/* ---- Settings as a page ------------------------------------------------- */
+/* Reuses the tab bodies from the retired Settings window, laid out for the
+   content column instead of a 620px panel. Its tabs live in the toolbar. */
+
+.settings--page { padding-top: var(--sp-2); }
+.settings__body--page { padding: 0; }
+.settings__body--page .stab { gap: var(--sp-6); }
+.settings__body--page .srow__control { width: 240px; }
+.settings__body--page .stab--about { padding: var(--sp-6) 0; }

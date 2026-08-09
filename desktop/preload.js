@@ -6,7 +6,7 @@
  * Grows across Prompts 1, 4 and 5 as the native surface from §9 lands
  * (menu bar, notifications, drag-out, powerSaveBlocker, context menus).
  */
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 const api = {
   getConfig: () => ipcRenderer.invoke("vocalis:getConfig"),
@@ -16,6 +16,8 @@ const api = {
   pickVoiceModel: () => ipcRenderer.invoke("vocalis:pickVoiceModel"),
   pickVoiceIndex: () => ipcRenderer.invoke("vocalis:pickVoiceIndex"),
   pickFolder: () => ipcRenderer.invoke("vocalis:pickFolder"),
+  pickAudio: (title) => ipcRenderer.invoke("vocalis:pickAudio", title),
+  pickAudioFiles: (title) => ipcRenderer.invoke("vocalis:pickAudioFiles", title),
   saveCover: (name) => ipcRenderer.invoke("vocalis:saveCover", name),
   savePath: (opts) => ipcRenderer.invoke("vocalis:savePath", opts),
 
@@ -30,6 +32,46 @@ const api = {
   // "system" | "light" | "dark" — keeps the macOS sidebar material in step
   // with the theme chosen inside the app.
   setAppearance: (source) => ipcRenderer.invoke("vocalis:setAppearance", source),
+
+  // Waveform peaks, cached to disk so a library render never re-decodes audio.
+  peaksGet: (key) => ipcRenderer.invoke("vocalis:peaksGet", key),
+  peaksPut: (key, value) => ipcRenderer.invoke("vocalis:peaksPut", key, value),
+
+  // Long runs (§9).
+  notify: (options) => ipcRenderer.invoke("vocalis:notify", options),
+  preventSleep: (prevent) => ipcRenderer.invoke("vocalis:preventSleep", prevent),
+
+  /**
+   * Real filesystem path for a dropped File. `File.path` was removed in
+   * Electron 32; webUtils.getPathForFile is the supported replacement.
+   */
+  pathForFile: (file) => {
+    try { return webUtils.getPathForFile(file); } catch { return ""; }
+  },
+
+  // Local audio bytes, for the Original/Cover A/B.
+  readAudio: (filePath) => ipcRenderer.invoke("vocalis:readAudio", filePath),
+
+  // Finder integration (§9).
+  startDrag: (filePaths) => ipcRenderer.send("vocalis:startDrag", filePaths),
+  quickLook: (filePath) => ipcRenderer.invoke("vocalis:quickLook", filePath),
+  exportFiles: (items) => ipcRenderer.invoke("vocalis:exportFiles", items),
+
+  // Pre-redesign cover metadata, stranded under the old file:// origin.
+  legacyCoverMeta: () => ipcRenderer.invoke("vocalis:legacyCoverMeta"),
+
+  // Settings window (§8, Prompt 6).
+  settingsChrome: (opts) => ipcRenderer.invoke("vocalis:settingsChrome", opts),
+  diagnostics: () => ipcRenderer.invoke("vocalis:diagnostics"),
+  chooseDataDir: () => ipcRenderer.invoke("vocalis:chooseDataDir"),
+  relaunch: () => ipcRenderer.invoke("vocalis:relaunch"),
+  broadcastSettings: (payload) => ipcRenderer.send("vocalis:settingsChanged", payload),
+  onSettingsChanged: (handler) => {
+    const listener = (_evt, payload) => handler(payload);
+    ipcRenderer.on("vocalis:settingsChanged", listener);
+    return () => ipcRenderer.off("vocalis:settingsChanged", listener);
+  },
+  openExternal: (url) => ipcRenderer.invoke("vocalis:openExternal", url),
 
   // Settings lives in its own window, macOS-style (§8).
   openSettings: () => ipcRenderer.invoke("vocalis:openSettings"),

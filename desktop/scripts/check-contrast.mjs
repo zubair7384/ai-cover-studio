@@ -127,6 +127,34 @@ for (const theme of ["dark", "light"]) {
   }
 }
 
+/* ---- Accents ------------------------------------------------------------ */
+// Every selectable accent must clear the same floor as amber, in both themes.
+// Adding one without this check is how a theme ships unreadable.
+
+const { ACCENTS } = await import("../renderer/app/accent.js");
+const BG = { dark: "#181A1C", light: "#F7F8F9" };
+const RAISED = { dark: "#1F2124", light: "#EEF0F2" };
+
+console.log("\n  ACCENTS");
+console.log(`  ${"".padEnd(58, "-")}`);
+for (const a of ACCENTS) {
+  const checks = [
+    ["on-accent on fill", a.onAccent, a.s500, "text"],
+    ["text on dark", a.s300, BG.dark, "text"],
+    ["text on light", a.s700, BG.light, "text"],
+    ["fill on dark", a.s500, BG.dark, "ui"],
+    ["fill on dark raised", a.s500, RAISED.dark, "ui"],
+    ["drawn on light", a.s700, BG.light, "ui"],
+    ["drawn on light raised", a.s700, RAISED.light, "ui"],
+  ];
+  const bad = checks.filter(([, fg, bg, kind]) => !passes(ratio(fg, bg), kind));
+  bad.forEach(([label, fg, bg, kind]) => {
+    failures++;
+    console.log(`  FAIL  ${a.label} — ${label.padEnd(22)} ${ratio(fg, bg).toFixed(2).padStart(6)} : 1   (min ${kind === "text" ? "4.5" : "3.0"})`);
+  });
+  if (!bad.length) console.log(`  pass  ${a.label.padEnd(28)} ${checks.length} pairs, both themes`);
+}
+
 console.log("");
 if (failures) {
   console.error(`  ${failures} pair(s) below the §11 floor\n`);
