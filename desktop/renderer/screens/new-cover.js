@@ -940,7 +940,8 @@ export function NewCoverFlow() {
     title: "New cover",
     search: false,
     actions: [generateBtn],
-    leading: Button({ label: "Cancel", variant: "secondary", onClick: () => exitFlow() }),
+    // No Cancel in the header. Esc leaves the flow (router.handleEscape), and
+    // the sidebar keeps the place you would land on marked while it is open.
   };
 
   root.destroy = () => {

@@ -24,7 +24,18 @@
 
 .srow { display: flex; align-items: center; gap: var(--sp-4); }
 .srow__label { flex: 1; min-width: 0; }
-.srow__control { flex: none; width: 220px; }
+/* The 220px track is sized for Select and TextField, which stretch to fill it.
+   The segmented control is intrinsically sized, so left-aligned in that track it
+   stopped ~35px short of the card edge and failed to line up with the accent
+   swatches one row below. Contents hang off the right of the track instead. */
+.srow__control {
+  flex: none;
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.srow__control > .field { align-self: stretch; }
 .srow__note { color: var(--text-secondary); }
 
 /* ---- Profile ------------------------------------------------------------ */

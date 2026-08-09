@@ -16,6 +16,7 @@ import {
 import { WaveThumb } from "../components/meter/thumbnail.js";
 import { icon as makeIcon } from "../lib/icons.js";
 import { getState, set, subscribe } from "../app/store.js";
+import { play } from "../app/now-playing.js";
 import { navigate } from "../app/router.js";
 import { mediaUrl, loadCovers, api } from "../app/api.js";
 import { getPeaks, peekPeaks } from "../app/peaks.js";
@@ -67,10 +68,6 @@ function sortItems(items, mode) {
     voice: (a, b) => (a.voice || "￿").localeCompare(b.voice || "￿"),
   };
   return [...items].sort(by[mode] || by.newest);
-}
-
-function play(item) {
-  set({ nowPlaying: { id: item.id, title: item.title, voice: item.voice, src: item.src } });
 }
 
 /* ---- destructive + rename flows ----------------------------------------- */

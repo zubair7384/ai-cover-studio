@@ -263,7 +263,11 @@ function createMainWindow() {
     backgroundColor: "#181A1C",
     ...(isMac ? {
       titleBarStyle: "hiddenInset",
-      trafficLightPosition: { x: 18, y: 20 },
+      // y:18, not 20. The coordinate is the button FRAME, which carries about
+      // 2px of inset above the ink — measured off a rendered frame, the buttons
+      // landed at y:22..33.5 while the 52px title band centres on y:26, so they
+      // sat ~2px below the wordmark beside them. 18 puts the ink on 20..31.5.
+      trafficLightPosition: { x: 18, y: 18 },
       vibrancy: "sidebar",
       visualEffectState: "followWindow",
     } : {

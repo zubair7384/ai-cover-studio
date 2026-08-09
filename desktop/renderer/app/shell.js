@@ -8,6 +8,7 @@ import { ErrorPanel } from "../components/primitives/index.js";
 import { Sidebar } from "./sidebar.js";
 import { Toolbar, bindScrollHairline } from "./toolbar.js";
 import { PlayerBar } from "./player-bar.js";
+import { watchLibrary } from "./now-playing.js";
 import { getState, subscribe, setSidebarVisible } from "./store.js";
 import { titleFor } from "./router.js";
 import { CoversView } from "../screens/covers.js";
@@ -24,18 +25,14 @@ export function Shell() {
   const toolbar = Toolbar();
   const scroll = el("main", { class: "scroll", id: "scroll" });
 
-  // The player bar is NOT created up front. Constructing it eagerly and hiding
-  // it left a dead scrubber reading 0:00 / 0:00 on every screen; it now mounts
-  // on the first selection and stays for the session (§8: "only when audio is
-  // loaded").
-  let player = null;
-  function ensurePlayer() {
-    if (player || !getState().nowPlaying) return;
-    player = PlayerBar();
-    content.appendChild(player);
-  }
+  // Permanent chrome: the bar is part of the window's silhouette, so it is
+  // mounted once and never removed. With nothing loaded it paints its own idle
+  // state (see player-bar.js) rather than leaving a gap the layout has to
+  // absorb. The flow layer stops above it, so it survives New cover / Train /
+  // Settings too.
+  const player = PlayerBar();
 
-  const content = el("div", { class: "content" }, toolbar, scroll);
+  const content = el("div", { class: "content" }, toolbar, scroll, player);
   const root = el("div", { id: "shell" }, sidebar, content);
 
   // Flow layer lives inside .content so it pushes over the library but leaves
@@ -90,7 +87,13 @@ export function Shell() {
       flowLayer = flowNode = flowToolbar = flowScroll = null;
       return;
     }
-    if (flowLayer) flowLayer.remove();
+    // Going straight from one flow to another (New cover → Train a voice) used
+    // to drop the layer without tearing down the view inside it, leaving its
+    // store subscriptions live.
+    if (flowLayer) {
+      flowNode?.destroy?.();
+      flowLayer.remove();
+    }
 
     flowToolbar = Toolbar();
     flowScroll = el("main", { class: "scroll" });
@@ -116,13 +119,12 @@ export function Shell() {
   bindScrollHairline(toolbar, scroll);
   paintChrome();
   mountView();
-  ensurePlayer();
 
   const offs = [
     subscribe(["route"], mountView),
     subscribe(["flow"], mountFlow),
     subscribe(["sidebarWidth", "sidebarVisible"], paintChrome),
-    subscribe(["nowPlaying"], ensurePlayer),
+    watchLibrary(),
   ];
 
   /* ---- exposed to boot.js for menu/shortcut wiring ---------------------- */

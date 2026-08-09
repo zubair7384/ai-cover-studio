@@ -34,10 +34,10 @@ const FLOW_ROWS = [
   { id: "train", label: "Train a voice", icon: "mic", shortcut: "⌘⇧T" },
 ];
 
-function navRow({ id, label, icon, shortcut }, active, under) {
+function navRow({ id, label, icon, shortcut }, active) {
   const row = el("button", {
     type: "button",
-    class: cls("nav-row", active && "nav-row--on", under && "nav-row--under"),
+    class: cls("nav-row", active && "nav-row--on"),
     role: "tab",
     "aria-selected": active ? "true" : "false",
     dataset: { place: id },
@@ -95,7 +95,7 @@ export function Sidebar() {
 
   const settingsRow = navRow(
     { id: "settings", label: "Settings", icon: "gear", shortcut: "⌘," },
-    false, false,
+    false,
   );
   const footerNav = el("nav", { class: "sidebar__footer-nav", "aria-label": "App" },
     settingsRow);
@@ -173,15 +173,14 @@ export function Sidebar() {
     const { route, flow } = getState();
 
     [...library.querySelectorAll(".nav-row")].forEach((n) => n.remove());
-    PLACES.forEach((p) => {
-      const isRoute = route === p.id;
-      // Selected when we are actually there; "under" when a flow sits on top,
-      // so the sidebar still shows where you will land on Cancel.
-      library.appendChild(navRow(p, !flow && isRoute, Boolean(flow) && isRoute));
-    });
+    // Selected only when we are actually there. An earlier build kept the place
+    // under an open flow marked in a quieter fill so the sidebar showed where
+    // Cancel would land; in practice two lit rows read as an ambiguous
+    // selection, so the flow row is now the only thing marked.
+    PLACES.forEach((p) => library.appendChild(navRow(p, !flow && route === p.id, false)));
 
     [...create.querySelectorAll(".nav-row")].forEach((n) => n.remove());
-    FLOW_ROWS.forEach((f) => create.appendChild(navRow(f, flow === f.id, false)));
+    FLOW_ROWS.forEach((f) => create.appendChild(navRow(f, flow === f.id)));
 
     settingsRow.classList.toggle("nav-row--on", flow === "settings");
     settingsRow.setAttribute("aria-selected", flow === "settings" ? "true" : "false");

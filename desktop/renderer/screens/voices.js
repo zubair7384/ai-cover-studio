@@ -14,7 +14,7 @@
 import { el, cls } from "../lib/dom.js";
 import { icon as makeIcon } from "../lib/icons.js";
 import {
-  Badge, Button, Checkbox, ContextMenu, EmptyState, IconButton, Menu,
+  Button, Checkbox, ContextMenu, EmptyState, IconButton, Menu,
   Select, Sheet, Spinner, TextField, LoadingRows, ErrorPanel,
 } from "../components/primitives/index.js";
 import { Waveform } from "../components/meter/index.js";
@@ -165,7 +165,8 @@ function Row(voice, selected) {
   let audio = null;
   let wave = null;
 
-  const previewSlot = el("div", { class: "row__preview" });
+  const previewSlot = el("div", { class: "vcard__wave" });
+  const elapsed = el("span", { class: "vcard__time t-meter tabular" }, "0:00");
 
   const stopPreview = () => {
     audio?.pause();
@@ -173,6 +174,8 @@ function Row(voice, selected) {
     wave?.destroy?.();
     wave = null;
     previewSlot.innerHTML = "";
+    elapsed.textContent = "0:00";
+    delete row.dataset.previewing;
     previewBtn.setAttribute("aria-label", `Preview ${voice.name}`);
     if (activePreview === stopPreview) activePreview = null;
     paintPreviewIcon("play");
@@ -194,9 +197,11 @@ function Row(voice, selected) {
     audio = new Audio(previewUrl);
     audio.addEventListener("timeupdate", () => {
       if (audio?.duration) wave?.setProgress(audio.currentTime / audio.duration);
+      elapsed.textContent = fmt.duration(audio?.currentTime || 0);
     });
     audio.addEventListener("ended", stopPreview);
     audio.play().catch(stopPreview);
+    row.dataset.previewing = "";
     paintPreviewIcon("pause");
     previewBtn.setAttribute("aria-label", `Stop previewing ${voice.name}`);
   };
@@ -227,31 +232,41 @@ function Row(voice, selected) {
     voice.epochs ? `${voice.epochs} epochs` : null,
   ].filter(Boolean).join(" · ");
 
+  // Status reads as a sentence about the voice, not as a chip: the tone is
+  // carried by the check and the colour, so a card with nothing to report is
+  // one quiet line rather than a grey pill drawing the eye.
+  const status = voice.has_index
+    ? el("div", { class: "vcard__status vcard__status--ok t-caption", title: INDEX_TIP },
+        makeIcon("check", 12), "Pitch index ready")
+    : el("div", { class: "vcard__status t-caption", title: INDEX_TIP }, "No pitch index");
+
   const row = el("div", {
-    class: cls("row", "row--voice", selected && "row--on"),
+    class: cls("vcard", selected && "vcard--on"),
     role: "option",
     tabindex: "0",
     "aria-selected": selected ? "true" : "false",
     dataset: { id: voice.name },
   },
-    el("span", { class: "voice-tile" }, initials(voice.name)),
-    el("div", { class: "row__main" },
-      el("div", { class: "row__titleline" },
-        el("span", { class: "row__title t-body-em" }, voice.name),
-        voice.has_index
-          ? Badge({ label: "Pitch index ready", tone: "ok", icon: "check", title: INDEX_TIP })
-          : Badge({ label: "No pitch index", tone: "neutral", title: INDEX_TIP }),
-      ),
-      el("div", { class: "row__meta t-caption" }, caption),
-      previewSlot,
-    ),
-    el("div", { class: "row__trail" },
-      busy,
-      previewBtn,
-      Button({ label: "Use in a cover", variant: "tertiary", size: "sm",
-        onClick: (e) => { e.stopPropagation(); useInCover(voice); } }),
+    el("div", { class: "vcard__head" },
+      el("span", { class: "voice-tile" }, initials(voice.name)),
+      el("span", { class: "vcard__name t-head" }, voice.name),
       IconButton({ icon: "more-horizontal", label: `More actions for ${voice.name}`,
         onClick: (e) => { e.stopPropagation(); Menu(e.currentTarget, menuItems(voice, setBusy)); } }),
+    ),
+    status,
+    // One fixed-height slot, three occupants. What a voice IS at rest; what you
+    // can DO with it under the pointer; the transport while it is playing. They
+    // swap in place so the card never changes height under the cursor.
+    el("div", { class: "vcard__slot" },
+      el("div", { class: "vcard__meta t-meter tabular" }, caption),
+      el("div", { class: "vcard__live" },
+        busy,
+        previewBtn,
+        Button({ label: "Use in a cover", variant: "tertiary", size: "sm",
+          onClick: (e) => { e.stopPropagation(); useInCover(voice); } }),
+        previewSlot,
+        elapsed,
+      ),
     ),
   );
 
@@ -270,7 +285,7 @@ function Row(voice, selected) {
 export function VoicesView() {
   const list = el("div", { class: "list", role: "listbox", "aria-label": "Voices" });
   const footer = el("div", { class: "list__lead t-caption" }, "");
-  const root = el("div", { class: "column" }, footer, list);
+  const root = el("div", { class: "column column--cards" }, footer, list);
 
   let rows = [];
   let sortMode = "recent";

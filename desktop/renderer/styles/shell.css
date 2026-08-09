@@ -67,9 +67,10 @@
   letter-spacing: 0.06em;
   /* Centring the LINE BOX is not centring the mark. Bitcount is 840 ascent /
      360 descent / 600 cap per 1000 upem, and VOCALIS is all caps with no
-     descenders, so the inked band sits 0.06em above the centre of its own box —
-     enough to read as misaligned beside the traffic lights, whose centres are
-     exactly on the 52px row's midline (y:20 + 6). Push it back down by that. */
+     descenders, so the inked band sits 0.06em above the centre of its own box.
+     With this the ink measures y:19..32.5 in the 52px band — centre 25.75
+     against the band's 26. The traffic lights are aimed at that same line from
+     main.js rather than the other way round; see the note there. */
   transform: translateY(0.06em);
 }
 
@@ -129,11 +130,6 @@
 .nav-row--on .nav-row__shortcut { color: currentColor; opacity: 0.65; }
 .nav-row--on:hover { background: var(--row-selected-hover); }
 
-/* While a flow is pushed over the library, the place you will return to stays
-   marked — quieter than selected, but not blank, so the sidebar never looks
-   dead while New cover or Train a voice is open. */
-.nav-row--under { background: var(--row-hover); color: var(--text-primary); }
-
 /* Activity rows carry a 14px ring instead of an icon. */
 .nav-row__ring { flex: none; display: inline-flex; }
 .nav-row__pct { flex: none; color: var(--text-secondary); }
@@ -147,12 +143,16 @@
 
 /* ---- Account row -------------------------------------------------------- */
 
+/* Same height and same 1px cap as the player bar across the split, so the two
+   hairlines read as one line running the width of the window rather than two
+   footers that nearly agree. */
 .account {
   flex: none;
+  height: var(--player-h);
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  padding: var(--sp-2) calc(var(--sidebar-inset) + var(--sp-1));
+  padding: 0 calc(var(--sidebar-inset) + var(--sp-1));
   border-top: 1px solid var(--hairline);
   min-width: 0;
 }
@@ -194,6 +194,12 @@
   overflow: hidden;
 }
 
+/* Placed by hand so the flow layer can sit on top of rows 1–2 without grid
+   auto-placement shunting these three out of its way (see .flow). */
+.content > .toolbar { grid-area: 1 / 1; }
+.content > .scroll  { grid-area: 2 / 1; min-height: 0; }
+.content > .player  { grid-area: 3 / 1; }
+
 .toolbar {
   display: flex;
   align-items: center;
@@ -206,7 +212,28 @@
 /* Hairline appears only once the content has scrolled (§6). */
 .toolbar[data-scrolled] { border-bottom-color: var(--hairline); }
 
-.toolbar__title { flex: none; color: var(--text-primary); }
+/* Set in the mark's face, not the UI face. It is the same voice the wordmark
+   uses one pane to the left, so the two read as one header band rather than two
+   unrelated titles. Tracked out because a dot-matrix face runs tight at title
+   size, and the §4 title-1 tracking (-0.015em) is a NEGATIVE value tuned for
+   SF — applying it here would close the gaps between the dots. */
+.toolbar__title {
+  flex: none;
+  color: var(--text-primary);
+  font-family: var(--font-mark);
+  /* Larger than the §4 title-1 it inherits (22/28). The dot-matrix face carries
+     less apparent weight than SF at the same size, so the view title was
+     reading smaller than the wordmark beside it; 26/32 still clears the 52px
+     bar with room for the optical nudge below. */
+  font-size: 26px;
+  line-height: 32px;
+  letter-spacing: 0.02em;
+  /* Same optical correction as .wordmark__name, for the same reason — the face
+     puts its ink 0.06em above the centre of its own box. Without it the title
+     and the wordmark, which sit in one 52px band either side of the split,
+     would not share a baseline. */
+  transform: translateY(0.06em);
+}
 .toolbar__spacer { flex: 1; }
 .toolbar__actions { flex: none; display: flex; align-items: center; gap: var(--sp-2); }
 .toolbar__search { width: 200px; }
@@ -225,13 +252,44 @@
    metadata ends up stranded a thousand pixels from the title it belongs to. */
 .column {
   max-width: var(--content-max);
-  margin: 0 auto;
+  /* Capped but NOT centred. Centring left the column drifting right of the
+     toolbar title as the window widened, so the view's own heading no longer
+     pointed at the content under it. */
+  margin: 0;
   width: 100%;
 }
 
 /* ---- List rows (§6) ----------------------------------------------------- */
 
+/* Rows carry 8px of their own padding so the hover/selection pill can bleed
+   past the text. The list is outdented by exactly that, so what the eye lines
+   up on — the row's text — sits on the toolbar title's left edge, not 8px in.
+   .list__lead is a sibling of the list (Voices' count line), so it needs the
+   same outdent; .list__footer lives INSIDE the list and already gets it. */
 .list { display: flex; flex-direction: column; }
+.list,
+.list__lead { margin-inline: calc(var(--sp-2) * -1); }
+
+/* Cards state their own edge, so there is no pill to bleed and nothing to
+   outdent — the card's border is what the eye lines up on. */
+.column--cards .list,
+.column--cards .list__lead { margin-inline: 0; }
+.column--cards .list__lead { padding-inline: 0; }
+
+/* Cards go in a grid, not a stack. A card is a fixed block of facts rather than
+   a line of text, so a full-width one leaves the … button stranded a window
+   away from the name it belongs to. auto-fill rather than a fixed 2: the column
+   caps at --content-max, so this settles on two and drops to one when the
+   window is narrow or the sidebar is dragged wide. */
+.column--cards .list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--sp-3);
+  align-items: start;
+}
+/* Loading, empty and error states are not cards and must not be dealt into a
+   single grid cell — they speak for the whole view. */
+.column--cards .list > :not(.vcard) { grid-column: 1 / -1; }
 
 /* Sticky date headers — Today / Yesterday / This Week / July 2026 (Prompt 2). */
 .group-header {
@@ -279,9 +337,8 @@
 .row__trail { flex: none; display: flex; align-items: center; gap: var(--sp-1); opacity: 0; }
 .row:hover .row__trail, .row--on .row__trail, .row:focus-within .row__trail { opacity: 1; }
 
-/* Prompt 2: cover rows are 56px. Prompt 3: voice rows are 60px. */
+/* Prompt 2: cover rows are 56px. (Voices left the list for cards — .vcard.) */
 .row--cover { height: 56px; }
-.row--voice { height: 60px; }
 
 /* 40x40 rounded-8 tile. Solid --gr-750 ground shows through until peaks land,
    so an unloaded tile reads as a block, never as a stray rule. */
@@ -322,9 +379,8 @@
 
 /* ---- Player bar (§8) ---------------------------------------------------- */
 
-/* display:flex would otherwise beat the UA [hidden] rule, leaving a dead
-   scrubber on screen. The bar is also only mounted once a cover is loaded. */
-.player[hidden] { display: none; }
+/* Always on screen, on every route and inside every flow. Its height is the
+   same as the sidebar's account row so their hairlines line up (see .account). */
 .player {
   height: var(--player-h);
   flex: none;
@@ -341,23 +397,43 @@
 .player__voice { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .player__wave { flex: 1; min-width: 80px; }
 
+/* Nothing loaded: the bar keeps its shape but recedes, and its scrubber is a
+   flat line rather than a waveform pretending to be audio. */
+.player[data-idle] .player__title { color: var(--text-secondary); font-weight: var(--t-body-weight); }
+.player[data-idle] .player__wave { opacity: 0.4; pointer-events: none; }
+
 /* ---- Full-view flow (New Cover / Train a Voice) ------------------------- */
 /* Pushes over the library rather than living in the sidebar (§8). */
 
+/* Laid into the content grid's first two rows rather than pinned to its box, so
+   it covers the toolbar and the library but stops short of the player bar — the
+   bar is permanent chrome and plays on through a flow (§8). Every child of
+   .content is placed explicitly (see above): auto-placement would otherwise
+   refuse to overlap this layer and push the toolbar down a row. */
 .flow {
-  position: absolute;
-  inset: 0;
+  grid-area: 1 / 1 / 3 / 2;
+  position: relative;
   z-index: 20;
   display: grid;
   grid-template-rows: var(--toolbar-h) 1fr;
+  min-height: 0;
   background: var(--bg-content);
+}
+/* The layer itself is opaque from the first frame. Fading the whole thing in
+   let the library underneath — its toolbar title especially, since .toolbar
+   carries no background of its own — ghost through for the full 240ms while
+   both planes appeared to shift, which read as a jerk of the view you just
+   left. Only the contents move; the ground under them never does. */
+.flow > .toolbar, .flow > .scroll {
   animation: flow-in var(--dur-view) var(--ease-enter);
 }
 @keyframes flow-in {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-@media (prefers-reduced-motion: reduce) { .flow { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .flow > .toolbar, .flow > .scroll { animation: none; }
+}
 
 /* ---- Drag region -------------------------------------------------------- */
 /* The top 52px of both panes drags the window; controls opt out via .no-drag. */
@@ -414,13 +490,76 @@
 
 /* ---- Voices (Prompt 3) -------------------------------------------------- */
 
-/* Inline preview. Sits inside the row, never in the global player bar —
-   auditioning a voice must not evict whatever cover you were listening to. */
-.row__preview:not(:empty) { padding-top: var(--sp-1); }
-.row__preview .meter { width: 100%; }
+/* A voice is a card, not a list row. A cover is one item among hundreds and
+   belongs in a dense list; a library holds a handful of voices, each of which
+   is a thing you made and has state worth showing — so it gets a surface of its
+   own with room for a status line and a transport. */
+.vcard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--pad-card);
+  border-radius: var(--r-card);
+  background: var(--bg-raised);
+  border: var(--border-1);
+  cursor: default;
+  color: var(--text-primary);
+  transition: background-color var(--dur-press) var(--ease-exit),
+              border-color var(--dur-press) var(--ease-exit);
+}
+.vcard:hover { background: var(--bg-panel); }
 
-/* A row grows to fit its preview rather than clipping it. */
-.row--voice:has(.row__preview:not(:empty)) { height: auto; padding-block: var(--sp-2); }
+/* Selected is the accent tint behind a full accent border — both derived from
+   whichever accent Settings is on, so this state re-hues with the theme. The
+   border does the work the 2px rail does on a list row; a card has an edge of
+   its own to state it with. */
+.vcard--on {
+  background: var(--tint);
+  border-color: var(--accent);
+}
+
+.vcard__head { display: flex; align-items: center; gap: var(--sp-3); min-width: 0; }
+.vcard__name {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.vcard__status {
+  display: flex; align-items: center; gap: var(--sp-1);
+  color: var(--text-secondary);
+}
+.vcard__status--ok { color: var(--ok-text); }
+
+/* The three occupants share one 28px band — the height of a default control —
+   so hovering a card swaps its contents without moving the card below it. */
+.vcard__slot { display: flex; align-items: center; min-height: var(--ctl-md); }
+.vcard__meta { flex: 1; color: var(--text-secondary); }
+.vcard__live { flex: 1; display: none; align-items: center; gap: var(--sp-2); min-width: 0; }
+
+.vcard:hover .vcard__meta,
+.vcard:focus-within .vcard__meta,
+.vcard[data-previewing] .vcard__meta { display: none; }
+.vcard:hover .vcard__live,
+.vcard:focus-within .vcard__live,
+.vcard[data-previewing] .vcard__live { display: flex; }
+
+/* Inline preview. Sits inside the card, never in the global player bar —
+   auditioning a voice must not evict whatever cover you were listening to. */
+.vcard__wave { flex: 1; min-width: 0; display: none; }
+.vcard__wave .meter { width: 100%; }
+.vcard__time { flex: none; display: none; color: var(--text-secondary); }
+.vcard[data-previewing] .vcard__wave,
+.vcard[data-previewing] .vcard__time { display: block; }
+/* While it plays, the transport IS the row — the label that started it would
+   only compete with the waveform for the same strip. */
+.vcard[data-previewing] .vcard__live .btn { display: none; }
+
+/* Playing is the one state where the preview control is filled: it is the
+   thing that is live in this view (§2), and it has to read as a stop. */
+.vcard[data-previewing] .icon-btn[aria-label^="Stop"] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
 
 /* Empty states may carry two equal-weight paths (train / import). */
 .empty__actions { display: flex; gap: var(--sp-2); align-items: center; }

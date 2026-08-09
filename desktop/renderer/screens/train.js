@@ -527,7 +527,7 @@ export function TrainFlow() {
     title: "Train a voice",
     search: false,
     actions: [startBtn],
-    leading: Button({ label: "Cancel", variant: "secondary", onClick: () => exitFlow() }),
+    // No Cancel in the header — see new-cover.js. Esc leaves the flow.
   };
 
   root.destroy = () => {

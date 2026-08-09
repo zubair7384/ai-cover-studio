@@ -1,6 +1,8 @@
 /**
- * Global player bar — §8. 48px, docked to the bottom of the content area,
- * mounts only when a cover is loaded.
+ * Global player bar — §8. 48px, docked to the bottom of the content area on
+ * every screen, flows included. It is permanent chrome: with nothing loaded it
+ * still occupies its row, reading "Nothing playing" over a flat scrubber, so
+ * the window has the same silhouette on first launch as it does in use.
  *
  * The A/B toggle crossfades between the original and the cover at the SAME
  * playhead position, so you hear the same bar of music either way. Two audio
@@ -18,6 +20,9 @@ import { getState, subscribe, readPersisted, persist } from "./store.js";
 
 const CROSSFADE_MS = 120;
 
+const IDLE_TITLE = "Nothing playing";
+const IDLE_VOICE = "Pick a cover to hear it here";
+
 let sharedCtx = null;
 const audioContext = () => (sharedCtx ||= new (window.AudioContext || window.webkitAudioContext)());
 
@@ -30,7 +35,7 @@ async function loadPeaks(url) {
 }
 
 export function PlayerBar() {
-  const root = el("div", { class: "player", hidden: true, role: "region", "aria-label": "Player" });
+  const root = el("div", { class: "player", role: "region", "aria-label": "Player" });
 
   /* ---- audio ------------------------------------------------------------ */
 
@@ -139,6 +144,7 @@ export function PlayerBar() {
   /* ---- transport -------------------------------------------------------- */
 
   function toggle() {
+    if (!getState().nowPlaying) return;      // Space on an empty bar does nothing
     const a = active();
     if (a.paused) {
       applyVolume();
@@ -184,14 +190,34 @@ export function PlayerBar() {
 
   /* ---- load ------------------------------------------------------------- */
 
-  async function load(item) {
-    if (!item) {
-      cover.pause(); original.pause();
-      root.hidden = true;
-      return;
-    }
+  /** Nothing loaded: the bar stays, but every transport control is inert. */
+  function paintIdle() {
+    cover.pause(); original.pause();
+    cover.removeAttribute("src");
+    original.removeAttribute("src");
+    source = "cover";
+    hasOriginal = false;
+    duration = 0;
 
-    root.hidden = false;
+    root.dataset.idle = "";
+    playBtn.disabled = true;
+    exportBtn.disabled = true;
+    paintPlaying(false);
+
+    title.textContent = IDLE_TITLE;
+    voice.textContent = IDLE_VOICE;
+    ab.style.display = "none";
+    wave.setPeaks([]);
+    wave.setProgress(0);
+    wave.setReadout(position(0, 0));
+  }
+
+  async function load(item) {
+    if (!item) return paintIdle();
+
+    delete root.dataset.idle;
+    playBtn.disabled = false;
+    exportBtn.disabled = false;
     title.textContent = item.title || "Untitled";
     voice.textContent = item.voice || "Unknown voice";
 

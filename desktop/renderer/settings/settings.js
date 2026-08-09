@@ -16,7 +16,6 @@ import {
 import { MeterBar } from "../components/meter/index.js";
 import { getState, readPersisted, persist } from "../app/store.js";
 import { api } from "../app/api.js";
-import { exitFlow } from "../app/router.js";
 import { preference as themePreference, setTheme, accent as currentAccent, setAccent } from "../app/theme.js";
 import { ACCENTS } from "../app/accent.js";
 import { initials } from "../app/profile.js";
@@ -522,10 +521,8 @@ export function SettingsView() {
     title: "Settings",
     search: false,
     actions: [tabs],
-    leading: Button({
-      label: "Done", variant: "secondary",
-      onClick: () => exitFlow(),
-    }),
+    // No Done in the header — every setting applies as it is changed, so there
+    // was nothing to confirm. Esc leaves, as it does from any flow.
   };
   return root;
 }
