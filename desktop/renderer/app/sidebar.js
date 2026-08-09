@@ -34,16 +34,6 @@ const FLOW_ROWS = [
   { id: "train", label: "Train a voice", icon: "mic", shortcut: "⌘⇧T" },
 ];
 
-function wordmarkGlyph() {
-  // Segmented bars, the Meter language used as the mark. Graphite, not amber:
-  // §2 reserves amber for live signals, and a wordmark is not one.
-  const g = el("span", { class: "wordmark__glyph", "aria-hidden": "true" });
-  [40, 75, 100, 60, 85].forEach((h) => {
-    g.appendChild(el("i", { style: { height: `${h}%` } }));
-  });
-  return g;
-}
-
 function navRow({ id, label, icon, shortcut }, active, under) {
   const row = el("button", {
     type: "button",
@@ -78,18 +68,11 @@ function activityRow(job) {
 }
 
 export function Sidebar() {
-  const version = () => {
-    const v = getState().appVersion;
-    return v ? `v${v.split(".")[0]}` : "";
-  };
-
-  const badge = el("span", { class: "wordmark__badge" }, version());
-
+  // The typeface is the mark now, so there is no glyph beside it and no version
+  // badge after it — the version lives in Settings, where it can be read.
   const top = el("div", { class: "sidebar__top" },
     el("div", { class: "wordmark" },
-      wordmarkGlyph(),
-      el("span", { class: "wordmark__name t-head" }, "Vocalis"),
-      badge,
+      el("span", { class: "wordmark__name" }, "VOCALIS"),
     ),
   );
 
@@ -217,7 +200,6 @@ export function Sidebar() {
   paintPlaces();
   paintActivity();
   paintAccount();
-  badge.textContent = version();
 
   const onTheme = () => paintTheme();
   window.addEventListener("vocalis:theme", onTheme);
@@ -227,7 +209,6 @@ export function Sidebar() {
     subscribe(["route", "flow"], paintPlaces),
     subscribe(["jobs"], paintActivity),
     subscribe(["profile"], paintAccount),
-    subscribe(["appVersion"], () => { badge.textContent = version(); }),
   ];
 
   root.destroy = () => offs.forEach((f) => f());

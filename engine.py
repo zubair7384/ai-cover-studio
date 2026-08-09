@@ -369,11 +369,50 @@ OUTPUT_FORMATS = {
 }
 
 
+SPEED_CHOICES = (0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0)
+
+
+def _atempo_chain(speed: float) -> str:
+    """
+    ffmpeg's atempo is only reliable within 0.5–2.0, so anything outside that
+    range becomes a chain of stages whose product is the requested speed.
+    Tempo, not resampling: 2x plays twice as fast at the same pitch.
+    """
+    stages = []
+    remaining = float(speed)
+    while remaining > 2.0:
+        stages.append(2.0)
+        remaining /= 2.0
+    while remaining < 0.5:
+        stages.append(0.5)
+        remaining /= 0.5
+    stages.append(remaining)
+    return ",".join(f"atempo={s:.6f}" for s in stages)
+
+
+def change_speed(path: Path, speed: float, work_dir: Path) -> Path:
+    """Re-time audio without shifting its pitch. Returns `path` for speed 1."""
+    if abs(float(speed) - 1.0) < 1e-3:
+        return path
+
+    out = work_dir / f"{path.stem}_x{speed}{path.suffix}"
+    cmd = ["ffmpeg", "-y", "-i", str(path), "-filter:a", _atempo_chain(speed),
+           "-vn", str(out)]
+    log.info("Changing speed to %sx …", speed)
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0 or not out.exists():
+        # The tail of ffmpeg's stderr is the only part worth surfacing.
+        detail = (result.stderr or "").strip().splitlines()[-1:] or ["no output"]
+        raise RuntimeError(f"Couldn't change the speed: {detail[0]}")
+    return out
+
+
 def mix_and_export(
     vocals_fx_path: Path,
     instrumental_path: Path,
     vocal_gain_db: float,
     output_format: str = "mp3",
+    speed: float = 1.0,
 ) -> Path:
     """Overlay the polished vocals on the instrumental and export."""
     from pydub import AudioSegment
@@ -387,6 +426,17 @@ def mix_and_export(
 
     stamp = time.strftime("%Y%m%d_%H%M%S")
     out_path = OUTPUT_DIR / f"final_cover_{stamp}.{spec['ext']}"
+
+    if abs(float(speed) - 1.0) >= 1e-3:
+        # Re-timed after mixing so the two stems can never drift apart, and
+        # while still lossless so the only encode is the final one.
+        raw = OUTPUT_DIR / f"final_cover_{stamp}_pre.wav"
+        final.export(raw, format="wav")
+        timed = change_speed(raw, float(speed), OUTPUT_DIR)
+        final = AudioSegment.from_file(timed)
+        raw.unlink(missing_ok=True)
+        timed.unlink(missing_ok=True)
+
     final.export(out_path, format=spec["format"], **spec["params"])
     log.info("Saved final cover -> %s", out_path)
     return out_path
@@ -613,6 +663,84 @@ def clear_downloads() -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Stem reuse & remixing
+#
+# A run leaves three pieces of intermediate audio on disk: the separated vocals
+# and instrumental, and the converted-and-polished vocals. Recording where they
+# went buys two things — a re-run at a different pitch skips separation, and the
+# balance, speed or format can be changed with no model run at all.
+# ---------------------------------------------------------------------------
+def _stem_signature(song_path: str, trim_start=None, trim_end=None) -> str:
+    """Identity of the audio fed to the separator: the file, plus any trim."""
+    path = Path(song_path)
+    try:
+        stat = path.stat()
+        base = f"{path.resolve()}|{stat.st_size}|{int(stat.st_mtime)}"
+    except OSError:
+        base = str(path)
+    return (f"{base}|{round(float(trim_start or 0), 3)}"
+            f"|{round(float(trim_end or 0), 3)}")
+
+
+def _cached_stems(song_path: str, trim_start=None, trim_end=None):
+    """(vocals, instrumental) from an earlier run of the same audio, or None."""
+    try:
+        import covers_manifest
+        return covers_manifest.find_stems(
+            _stem_signature(song_path, trim_start, trim_end))
+    except Exception:
+        # Reuse is an optimisation; failing to find stems must never fail a run.
+        log.warning("Couldn't look for reusable stems:\n%s", traceback.format_exc())
+        return None
+
+
+def remix_cover(
+    cover_id: str,
+    vocal_gain_db: float = 0.0,
+    speed: float = 1.0,
+    output_format: str = "mp3",
+) -> dict:
+    """
+    Re-mix an existing cover at new balance/speed/format from its stems, with no
+    separation and no model run. Returns the new cover's manifest record.
+    """
+    import covers_manifest
+
+    record = covers_manifest.get(cover_id)
+    if not record:
+        raise ValueError("That cover is no longer in your library.")
+
+    stems = record.get("stems") or {}
+    vocals_fx = Path(stems.get("vocalsFx") or "")
+    instrumental = Path(stems.get("instrumental") or "")
+    if not vocals_fx.is_file() or not instrumental.is_file():
+        raise ValueError(
+            "This cover's working files are gone, so its mix can't be changed. "
+            "Generate it again and the new copy will be adjustable.")
+
+    log.info("Remixing %s at gain=%s speed=%sx format=%s",
+             cover_id, vocal_gain_db, speed, output_format)
+    out_path = mix_and_export(vocals_fx, instrumental, float(vocal_gain_db),
+                              output_format, float(speed))
+
+    # The new file inherits the same stems, so it stays adjustable in turn.
+    return covers_manifest.record_generation(
+        out_path,
+        voice_id=record.get("voiceId") or "",
+        source_path=record.get("sourcePath"),
+        source_file_name=record.get("sourceFileName"),
+        pitch_shift=record.get("pitchShift"),
+        voice_character=record.get("voiceCharacter"),
+        stems=stems,
+        stem_signature=record.get("stemSignature"),
+        trim_start=record.get("trimStart"),
+        trim_end=record.get("trimEnd"),
+        vocal_gain_db=float(vocal_gain_db),
+        speed=float(speed),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Full inference pipeline
 # ---------------------------------------------------------------------------
 def trim_track(song_path: str, start: float, end: float, work_dir: Path) -> Path:
@@ -651,6 +779,7 @@ def generate_cover(
     output_format: str = "mp3",
     trim_start: Optional[float] = None,
     trim_end: Optional[float] = None,
+    speed: float = 1.0,
 ) -> Path:
     """
     Run the full cover pipeline. Reports progress via callbacks and returns the
@@ -680,9 +809,21 @@ def generate_cover(
             pipeline_input = str(trim_track(song_path, trim_start or 0.0,
                                             trim_end or 0.0, work_dir))
 
-        progress(0.05, "Step 1/4 — separating vocals & instrumental (HTDemucs)",
-                 "First run downloads the separation model (~85 MB).")
-        vocals, instrumental = separate_track(pipeline_input, work_dir)
+        # Separation is ~60% of the run and depends only on the input audio, so
+        # a re-run of the same song at a different pitch reuses the stems from
+        # the last one. This is what makes iterating on the voice settings
+        # bearable — the model step alone is seconds, not minutes.
+        vocals = instrumental = None
+        cached = _cached_stems(song_path, trim_start, trim_end)
+        if cached:
+            vocals, instrumental = cached
+            progress(0.44, "Step 1/4 — reusing the separated stems",
+                     "Same song as the last run, so this step is already done.")
+            log.info("Reusing stems from %s", vocals.parent)
+        else:
+            progress(0.05, "Step 1/4 — separating vocals & instrumental (HTDemucs)",
+                     "First run downloads the separation model (~85 MB).")
+            vocals, instrumental = separate_track(pipeline_input, work_dir)
 
         progress(0.45, "Step 2/4 — cloning vocals with RVC (RMVPE)",
                  "First run downloads the RMVPE pitch model (~180 MB).")
@@ -694,7 +835,7 @@ def generate_cover(
 
         progress(0.92, "Step 4/4 — mixing & exporting", "")
         final_path = mix_and_export(polished, instrumental, float(vocal_gain_db),
-                                    output_format)
+                                    output_format, float(speed))
 
         # Record what this cover actually IS, with the parameters actually
         # used, before anything else can observe the file. Written here rather
@@ -708,6 +849,14 @@ def generate_cover(
                 source_file_name=source_file_name or Path(song_path).name,
                 pitch_shift=int(pitch_shift),
                 voice_character=float(index_rate),
+                stems={"vocals": str(vocals),
+                       "instrumental": str(instrumental),
+                       "vocalsFx": str(polished)},
+                stem_signature=_stem_signature(song_path, trim_start, trim_end),
+                trim_start=trim_start,
+                trim_end=trim_end,
+                vocal_gain_db=float(vocal_gain_db),
+                speed=float(speed),
             )
         except Exception:
             # A manifest failure must never lose the user their cover.

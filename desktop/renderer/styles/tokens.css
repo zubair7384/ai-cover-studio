@@ -77,6 +77,14 @@
   --bg-control-hover: var(--gr-700);
   --bg-sidebar-fallback: var(--gr-850); /* when vibrancy is unavailable */
 
+  /* Sidebar row states. Selection is a LIFTED surface, not an accent fill —
+     the accent moves to the label and icon instead (see .nav-row--on). Stated
+     as an overlay rather than a flat value so the pill lifts off whatever the
+     vibrancy behind the sidebar happens to be, not off one assumed grey. */
+  --row-hover:          rgba(255, 255, 255, 0.055);
+  --row-selected:       rgba(255, 255, 255, 0.10);
+  --row-selected-hover: rgba(255, 255, 255, 0.14);
+
   /* Elevation borders + shadows (§5) */
   --border-1: 1px solid rgba(255, 255, 255, 0.06);
   --border-2: 1px solid rgba(255, 255, 255, 0.08);
@@ -162,6 +170,9 @@
 
   --font-ui:   -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+  /* The wordmark only. Bundled rather than fetched: the CSP allows no external
+     origin, and a logo that arrives late is worse than one that never moves. */
+  --font-mark:  "Bitcount Prop Single", var(--font-mono);
 
   /* title-1 — view title in content area */
   --t-title-1-size: 22px;  --t-title-1-lh: 28px;  --t-title-1-weight: 600;  --t-title-1-track: -0.015em;
@@ -277,6 +288,15 @@
   --bg-control:       #FFFFFF;
   --bg-control-hover: var(--gr-100);
   --bg-sidebar-fallback: var(--gr-150);
+
+  /* Lifting still means "toward white" here, so the light pill goes lighter
+     than the sidebar rather than darker. That is also the only version that
+     clears §11: --accent-text is already at its darkest stop (700), and amber
+     700 on a grey pill measures 3.45:1 — on white it is 5.09:1. Every other
+     accent clears 6:1 on white. */
+  --row-hover:          rgba(255, 255, 255, 0.55);
+  --row-selected:       #FFFFFF;
+  --row-selected-hover: #FFFFFF;
 
   --border-1: 1px solid rgba(0, 0, 0, 0.08);
   --border-2: 1px solid rgba(0, 0, 0, 0.10);

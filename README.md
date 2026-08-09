@@ -10,6 +10,11 @@ Fully local AI song-cover generator built with Gradio.
 3. Applies light vocal polish with Pedalboard.
 4. Mixes the converted vocals back over the instrumental and exports an MP3.
 
+Steps 1–3 are the expensive ones, so the intermediate audio is kept and recorded
+in the manifest. Two things follow: a re-run of the same song at a different
+pitch skips step 1, and the balance, speed and format of a finished cover can be
+changed by redoing step 4 alone — no model run, about a second.
+
 ## Setup
 
 Python 3.10 or 3.11 is recommended. `ffmpeg` must be installed on your system.

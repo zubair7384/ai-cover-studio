@@ -386,6 +386,57 @@ def convert(payload: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Remix — change the mix of an existing cover without re-running the model
+# ---------------------------------------------------------------------------
+_STEM_KEYS = {"vocals": "vocals", "instrumental": "instrumental",
+              "vocalsFx": "vocalsFx"}
+
+
+@app.get("/api/covers/{cover_id}/stems/{which}")
+def cover_stem(cover_id: str, which: str) -> FileResponse:
+    """
+    Serve one of a cover's stems, so the renderer can play them against each
+    other and let the balance be heard while it is being dragged.
+    """
+    key = _STEM_KEYS.get(which)
+    if not key:
+        raise HTTPException(status_code=404, detail="No such stem.")
+
+    record = covers_manifest.get(cover_id)
+    path = Path(((record or {}).get("stems") or {}).get(key) or "")
+    if not record or not path.is_file():
+        raise HTTPException(status_code=404,
+                            detail="This cover's working files are no longer on disk.")
+    return FileResponse(path, media_type="audio/wav")
+
+
+@app.post("/api/remix")
+def remix(payload: dict) -> dict:
+    """
+    Re-mix at a new balance/speed/format. Synchronous rather than a job: there
+    is no model run here, so it finishes in about the time an export takes.
+    """
+    cover_id = str(payload.get("id", ""))
+    if not cover_id:
+        raise HTTPException(status_code=400, detail="Which cover?")
+
+    speed = float(payload.get("speed", 1.0) or 1.0)
+    if not 0.25 <= speed <= 4.0:
+        raise HTTPException(status_code=400, detail="That speed is out of range.")
+
+    try:
+        record = engine.remix_cover(
+            cover_id,
+            vocal_gain_db=float(payload.get("vocal_gain_db", 0.0) or 0.0),
+            speed=speed,
+            output_format=str(payload.get("output_format", "mp3") or "mp3"),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"cover": record}
+
+
+# ---------------------------------------------------------------------------
 # Fetch a song from a link
 # ---------------------------------------------------------------------------
 @app.post("/api/fetch-url")

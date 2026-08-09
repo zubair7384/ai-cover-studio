@@ -54,6 +54,14 @@ export const api = {
   /** Resolve a pasted link to a local audio file. Returns a job id. */
   fetchUrl: (url) => post("/api/fetch-url", { url }),
 
+  /** A cover's intermediate audio — "vocalsFx" or "instrumental". */
+  stemUrl: (id, which) =>
+    `${base}/api/covers/${encodeURIComponent(id)}/stems/${which}`,
+  /** Re-mix a cover at a new balance/speed/format. No model run. */
+  remix: ({ id, vocalGainDb = 0, speed = 1, outputFormat = "mp3" }) =>
+    post("/api/remix", { id, vocal_gain_db: vocalGainDb, speed,
+                         output_format: outputFormat }),
+
   voices: () => json("/api/models/meta"),
   previewUrl: (name) => `${base}/api/models/preview/${encodeURIComponent(name)}`,
   createPreview: (modelName, referencePath) =>

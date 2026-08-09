@@ -113,6 +113,18 @@ export function IconButton({
 
   if (onClick) node.addEventListener("click", onClick);
   if (tooltip) attachTooltip(node, typeof tooltip === "string" ? tooltip : label);
+
+  /**
+   * Swap the glyph after construction — a play button has to become a pause
+   * button, and re-creating the node would drop its listeners and focus.
+   */
+  node.setIcon = (name, nextLabel) => {
+    const current = node.querySelector("svg");
+    const next = makeIcon(name, px);
+    if (current) node.replaceChild(next, current); else node.appendChild(next);
+    if (nextLabel) node.setAttribute("aria-label", nextLabel);
+  };
+
   return node;
 }
 

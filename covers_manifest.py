@@ -205,6 +205,12 @@ def record_generation(
     pitch_shift: Optional[int] = None,
     voice_character: Optional[float] = None,
     sample_rate: Optional[int] = None,
+    stems: Optional[dict] = None,
+    stem_signature: Optional[str] = None,
+    trim_start: Optional[float] = None,
+    trim_end: Optional[float] = None,
+    vocal_gain_db: Optional[float] = None,
+    speed: Optional[float] = None,
 ) -> dict:
     """
     Called by the engine the moment a cover lands, with the parameters actually
@@ -232,12 +238,47 @@ def record_generation(
         "outputFormat": output_path.suffix.lstrip(".").lower() or "mp3",
         "origin": ORIGIN_GENERATED,
         "missing": False,
+        # The intermediate audio this cover was mixed from. Keeping it lets the
+        # balance, speed and format be changed later without re-running the
+        # model, and lets a re-run at a different pitch skip separation.
+        "stems": stems or None,
+        "stemSignature": stem_signature,
+        "trimStart": trim_start,
+        "trimEnd": trim_end,
+        "vocalGainDb": vocal_gain_db,
+        "speed": speed,
     }
 
     records = load()
     records[record["id"]] = record
     save(records)
     return record
+
+
+def get(cover_id: str) -> Optional[dict]:
+    """One record by id, or None."""
+    return load().get(str(cover_id))
+
+
+def find_stems(signature: str) -> Optional[tuple]:
+    """
+    The separated stems of any earlier cover made from the same audio, newest
+    first, provided the files are still on disk.
+
+    Returns (vocals, instrumental) as Paths — the separator's output, not the
+    converted vocals, since that is what a fresh run needs as input.
+    """
+    if not signature:
+        return None
+    candidates = [r for r in load().values() if r.get("stemSignature") == signature]
+    candidates.sort(key=lambda r: r.get("createdAt") or 0, reverse=True)
+    for record in candidates:
+        stems = record.get("stems") or {}
+        vocals = Path(stems.get("vocals") or "")
+        instrumental = Path(stems.get("instrumental") or "")
+        if vocals.is_file() and instrumental.is_file():
+            return vocals, instrumental
+    return None
 
 
 # ---------------------------------------------------------------------------

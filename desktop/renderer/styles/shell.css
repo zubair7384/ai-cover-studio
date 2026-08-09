@@ -41,25 +41,36 @@
   align-items: center;
   gap: var(--sp-2);
   padding: 0 var(--sp-3);
-  padding-left: 78px;          /* clear of the traffic lights at x:18 */
+  /* The traffic lights start at x:18 (main.js) and are three 12px buttons on
+     20px centres, so the group ends at x:70. 8px after that read as a collision
+     rather than a gap; one full --sp-4 step separates them. */
+  padding-left: calc(70px + var(--sp-4));
+  /* The mark does not shrink, so a sidebar dragged to its 180px minimum clips
+     it rather than pushing the rest of the row out of the window. */
+  overflow: hidden;
 }
 
 .wordmark { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
-/* Graphite, not amber: the mark is branding, not a live signal. Keeping it
-   amber pushed Covers to four amber elements, over the §2 limit of three. */
-.wordmark__glyph { display: flex; align-items: center; gap: 2px; height: 16px; color: var(--text-tertiary); }
-.wordmark__glyph i { width: 2px; border-radius: 1px; background: currentColor; display: block; }
-.wordmark__name { color: var(--text-primary); white-space: nowrap; }
-.wordmark__badge {
-  flex: none;
-  padding: 0 var(--sp-1);
-  height: 16px;
-  display: inline-flex; align-items: center;
-  border-radius: var(--r-chip);
-  background: var(--gr-750);
-  color: var(--text-secondary);
-  font-size: var(--t-caption-size);
-  font-weight: var(--t-label-weight);
+.wordmark__name {
+  white-space: nowrap;
+  /* Set in the accent, which is the one colour the user picks. This is a
+     deliberate exception to §2's "amber means live": the mark is the only
+     always-on accent element, and it sits outside the scanning path of the
+     rows below it. */
+  color: var(--accent-text);
+  /* The dot-matrix face carries the mark, so it is set apart from the UI type:
+     capitals, tracked out, and large enough for the dots to read as dots. */
+  font-family: var(--font-mark);
+  font-size: 22px;
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  /* Centring the LINE BOX is not centring the mark. Bitcount is 840 ascent /
+     360 descent / 600 cap per 1000 upem, and VOCALIS is all caps with no
+     descenders, so the inked band sits 0.06em above the centre of its own box —
+     enough to read as misaligned beside the traffic lights, whose centres are
+     exactly on the 52px row's midline (y:20 + 6). Push it back down by that. */
+  transform: translateY(0.06em);
 }
 
 /* Rows sit inset from the window edge — enough that the selection reads as a
@@ -93,7 +104,7 @@
   transition: background-color var(--dur-press) var(--ease-exit),
               color var(--dur-press) var(--ease-exit);
 }
-.nav-row:hover:not(.nav-row--on) { background: var(--gr-800); color: var(--text-primary); }
+.nav-row:hover:not(.nav-row--on) { background: var(--row-hover); color: var(--text-primary); }
 .nav-row__icon { flex: none; display: inline-flex; color: currentColor; }
 .nav-row__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nav-row__shortcut { flex: none; color: var(--text-tertiary); }
@@ -101,24 +112,27 @@
 /* Resting is transparent with no border of any kind; the UA button border is
    zeroed in base.css. Exactly one row carries --on at a time.
 
-   Solid accent fill rather than §6's tint-plus-rail. At 14% the pill barely
-   registered against the sidebar surface, so the gutter around it read as no
-   gutter at all — which is what "I can't see the offset" actually was. macOS
-   System Settings and Music both fill the selected row solid for this reason.
-   Near-black text per §3: white on an accent fill fails contrast. */
+   The pill is a neutral LIFT and the accent is carried by the label and icon,
+   the way Finder and Music mark a sidebar row. An earlier build filled the row
+   solid accent; at sidebar scale that is a block of saturated colour sitting
+   permanently in the corner of the eye, which is exactly what §2 reserves for
+   things that are live. Tinting the type instead says the same thing quietly,
+   and it re-hues for free with the accent the user picked (--accent-text is
+   theme- and accent-derived — see app/accent.js). */
 .nav-row--on {
-  background: var(--accent);
-  color: var(--on-accent);
+  background: var(--row-selected);
+  color: var(--accent-text);
   font-weight: var(--t-body-em-weight);
 }
-.nav-row--on .nav-row__icon,
-.nav-row--on .nav-row__shortcut { color: var(--on-accent); }
-.nav-row--on:hover { background: var(--accent-hover); }
+/* Both inherit the accent; the shortcut stays the quieter of the two. */
+.nav-row--on .nav-row__icon { color: currentColor; }
+.nav-row--on .nav-row__shortcut { color: currentColor; opacity: 0.65; }
+.nav-row--on:hover { background: var(--row-selected-hover); }
 
 /* While a flow is pushed over the library, the place you will return to stays
    marked — quieter than selected, but not blank, so the sidebar never looks
    dead while New cover or Train a voice is open. */
-.nav-row--under { background: var(--gr-800); color: var(--text-primary); }
+.nav-row--under { background: var(--row-hover); color: var(--text-primary); }
 
 /* Activity rows carry a 14px ring instead of an icon. */
 .nav-row__ring { flex: none; display: inline-flex; }
@@ -491,6 +505,28 @@
 .songrow__main { flex: 1; min-width: 0; }
 .songrow__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .songrow__meta { color: var(--text-secondary); }
+
+/* ---- Live mix controls (finished cover) --------------------------------- */
+/* A row inside .runpanel, above the hairline that separates "what happened"
+   from "what you can still change without another run". */
+
+.runpanel__mix {
+  display: grid;
+  grid-template-columns: 1fr 160px;
+  /* Aligned at the top, so the two labels sit on one line. Aligning at the
+     bottom instead let the slider's help text shove Speed downwards. */
+  align-items: start;
+  gap: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--hairline);
+}
+/* Its own row: the two controls above are what you change, this is the one
+   thing you do with them, and sharing their row left the slider and the Speed
+   menu fighting for width. */
+.runpanel__save {
+  grid-column: 1 / -1;
+  width: 100%;
+}
 
 /* ---- Trim panel --------------------------------------------------------- */
 /* Same card as .runpanel — trimming is an edit to the song above it, so it

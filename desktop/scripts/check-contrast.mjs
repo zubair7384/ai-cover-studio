@@ -68,6 +68,18 @@ function resolve(tokens, value, depth = 0) {
   return resolve(tokens, next, depth + 1);
 }
 
+/** Flatten an rgba() overlay onto an opaque hex. Returns hex untouched. */
+function over(value, baseHex) {
+  const m = String(value).match(/^rgba?\(([^)]+)\)$/);
+  if (!m) return value;
+  const [r, g, b, a = 1] = m[1].split(",").map(Number);
+  const base = baseHex.replace("#", "");
+  const n = parseInt(base.length === 3 ? base.split("").map((c) => c + c).join("") : base, 16);
+  const mix = (c, under) => Math.round(c * a + under * (1 - a));
+  return "#" + [mix(r, (n >> 16) & 255), mix(g, (n >> 8) & 255), mix(b, n & 255)]
+    .map((c) => c.toString(16).padStart(2, "0")).join("");
+}
+
 /* ---- the pairs the app renders ----------------------------------------- */
 
 const PAIRS = [
@@ -135,6 +147,14 @@ const { ACCENTS } = await import("../renderer/app/accent.js");
 const BG = { dark: "#181A1C", light: "#F7F8F9" };
 const RAISED = { dark: "#1F2124", light: "#EEF0F2" };
 
+// The selected sidebar row draws its label in the accent over a translucent
+// pill, so the pill has to be flattened onto the sidebar before it can be
+// measured. Read from the tokens rather than restated, or the two drift.
+const SELECTED = Object.fromEntries(["dark", "light"].map((theme) => {
+  const t = tokensFor(theme);
+  return [theme, over(resolve(t, t["--row-selected"]), resolve(t, t["--bg-sidebar-fallback"]))];
+}));
+
 console.log("\n  ACCENTS");
 console.log(`  ${"".padEnd(58, "-")}`);
 for (const a of ACCENTS) {
@@ -146,6 +166,8 @@ for (const a of ACCENTS) {
     ["fill on dark raised", a.s500, RAISED.dark, "ui"],
     ["drawn on light", a.s700, BG.light, "ui"],
     ["drawn on light raised", a.s700, RAISED.light, "ui"],
+    ["selected row, dark", a.s300, SELECTED.dark, "text"],
+    ["selected row, light", a.s700, SELECTED.light, "text"],
   ];
   const bad = checks.filter(([, fg, bg, kind]) => !passes(ratio(fg, bg), kind));
   bad.forEach(([label, fg, bg, kind]) => {

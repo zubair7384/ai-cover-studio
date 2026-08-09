@@ -22,8 +22,10 @@ import { Waveform, Pipeline, COVER_STAGES } from "../components/meter/index.js";
 import { MeterBar } from "../components/meter/meter-bar.js";
 import { getState, set, subscribe } from "../app/store.js";
 import { exitFlow, setFlowDirtyCheck } from "../app/router.js";
-import { api, mediaUrl, runJob } from "../app/api.js";
+import { api, mediaUrl, runJob, loadCovers } from "../app/api.js";
 import { startCover, cancelJob, getJob, COVER_STAGE_IDS } from "../app/jobs.js";
+import { MixPlayer } from "../app/mix-player.js";
+import { toast } from "../app/toast.js";
 import { initials } from "../app/profile.js";
 import * as fmt from "../app/format.js";
 
@@ -40,6 +42,12 @@ const FORMATS = [
   { value: "wav", label: "WAV 24-bit" },
   { value: "flac", label: "FLAC" },
 ];
+
+// Tempo, not pitch — the engine's atempo chain and the browser's playbackRate
+// agree on what these mean, so preview and saved file match.
+const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3].map((v) => ({
+  value: String(v), label: `${v}×`,
+}));
 
 const AUDIO_RE = /\.(mp3|wav|flac|m4a|ogg|aiff?|aac)$/i;
 const URL_RE = /^https?:\/\/\S+$/i;
@@ -338,6 +346,14 @@ export function NewCoverFlow() {
             wave.setProgress(preview.currentTime / total);
             if (stopAt != null && preview.currentTime >= stopAt) preview.pause();
           });
+          // Including "pause" fired by the stopAt guard above, so the button
+          // resets itself when the selection runs out.
+          ["play", "pause", "ended"].forEach((type) =>
+            preview.addEventListener(type, () => {
+              const playing = !preview.paused;
+              playBtn.setIcon(playing ? "pause" : "play",
+                playing ? "Pause the selection" : "Play the selection");
+            }));
         }
         // Always from the head of the selection: the point is to audition the
         // part that will actually be converted.
@@ -451,6 +467,7 @@ export function NewCoverFlow() {
   let pipeline = null;
   let meter = null;
   let resultWave = null;
+  let resultPlayer = null;
 
   function paintResult() {
     const job = jobId ? getJob(jobId) : null;
@@ -517,21 +534,34 @@ export function NewCoverFlow() {
 
     const name = job.result.path.split("/").pop();
     const src = mediaUrl(name);
-    const audio = new Audio(src);
+
+    // Played from its stems, which is what makes balance and speed audible
+    // without a re-export. Falls back to the exported file for a cover whose
+    // working files are gone.
+    const player = MixPlayer({
+      fileSrc: src,
+      stemSrcs: {
+        vocals: api.stemUrl(name, "vocalsFx"),
+        instrumental: api.stemUrl(name, "instrumental"),
+      },
+      // Only reachable for a cover whose working files were cleaned up.
+      onDegrade: () => degradeMix?.(),
+    });
+    resultPlayer = player;
 
     resultWave = Waveform({
       peaks: [], progress: 0, height: 56, readout: "0:00",
       ariaLabel: "Scrub the finished cover",
-      onSeek: (f) => { if (audio.duration) audio.currentTime = f * audio.duration; },
+      onSeek: (f) => { if (player.duration) player.seek(f * player.duration); },
     });
     // Bound to this panel's own waveform, not the outer `resultWave`: "Adjust
-    // and run again" nulls that while this <audio> is still ticking, and the
+    // and run again" nulls that while this player is still ticking, and the
     // handler then threw on every frame of playback.
     const wave = resultWave;
-    audio.addEventListener("timeupdate", () => {
-      if (!audio.duration) return;
-      wave.setProgress(audio.currentTime / audio.duration);
-      wave.setReadout(fmt.position(audio.currentTime, audio.duration));
+    player.onTime(() => {
+      if (!player.duration) return;
+      wave.setProgress(player.currentTime / player.duration);
+      wave.setReadout(fmt.position(player.currentTime, player.duration));
     });
 
     import("../app/peaks.js").then(({ getPeaks }) =>
@@ -542,10 +572,20 @@ export function NewCoverFlow() {
     const playBtn = IconButton({
       icon: "play", label: "Play the finished cover",
       onClick: () => {
-        const active = side === "cover" ? audio : (original || audio);
-        if (active.paused) active.play().catch(() => {}); else active.pause();
+        if (side === "cover") return player.toggle();
+        if (original?.paused) original.play().catch(() => {}); else original?.pause();
       },
     });
+
+    // The button reflects what is actually playing rather than what was last
+    // clicked, so it stays right when a track ends on its own.
+    const paintPlay = () => {
+      const playing = side === "cover" ? !player.paused : Boolean(original && !original.paused);
+      const what = side === "cover" ? "the finished cover" : "the original";
+      playBtn.setIcon(playing ? "pause" : "play",
+        playing ? `Pause ${what}` : `Play ${what}`);
+    };
+    player.onTime(paintPlay);
 
     // A/B against the original, at the same playhead. The source track lives
     // outside the app:// origin, so its bytes come over IPC as a blob. When the
@@ -564,14 +604,105 @@ export function NewCoverFlow() {
           const url = await sourceAudioUrl();
           if (!url) return;     // unreadable source — stay on the cover
           original = new Audio(url);
+          original.preservesPitch = true;
+          ["play", "pause", "ended"].forEach((type) =>
+            original.addEventListener(type, paintPlay));
         }
-        const from = side === "cover" ? audio : original;
-        const to = next === "cover" ? audio : original;
-        to.currentTime = from.currentTime + (next === "original" ? offset : -offset);
-        if (!from.paused) { to.play().catch(() => {}); from.pause(); }
+        const wasPlaying = side === "cover" ? !player.paused : !original.paused;
+        const at = side === "cover" ? player.currentTime : original.currentTime;
+
+        if (next === "cover") {
+          original.pause();
+          player.seek(Math.max(0, at - offset));
+          if (wasPlaying) player.play();
+        } else {
+          player.pause();
+          original.currentTime = at + offset;
+          original.playbackRate = mix.speed;
+          if (wasPlaying) original.play().catch(() => {});
+        }
         side = next;
+        paintPlay();
       },
     });
+
+    /* ---- live mix controls --------------------------------------------- */
+    // Balance and speed are mix decisions, so they take effect on the playing
+    // audio immediately. The three voice settings in the Inspector are inputs
+    // to the model — there is no audio to adjust until it has run — so those
+    // still need "Adjust and run again", which now reuses the separated stems.
+
+    const mix = { gain: params.vocalGain ?? 0, speed: 1 };
+    let degradeMix = null;
+
+    // Built enabled and disabled afterwards on purpose: Button wraps itself in a
+    // span when it is given a tooltip AND starts disabled, and setting
+    // `.disabled` on that wrapper would never reach the real button.
+    const saveBtn = Button({
+      label: "Save this mix", variant: "secondary",
+      tooltip: "Saves a copy at the balance and speed you are hearing.",
+    });
+    saveBtn.classList.add("runpanel__save");
+    saveBtn.disabled = true;
+
+    const markDirty = () => {
+      saveBtn.disabled = !player.adjustable
+        || (Math.abs(mix.gain - (params.vocalGain ?? 0)) < 0.01 && mix.speed === 1);
+      saveBtn.querySelector(".btn__label").textContent = "Save this mix";
+    };
+
+    const balance = Slider({
+      label: "Vocal balance",
+      min: -6, max: 6, step: 0.5, value: mix.gain,
+      format: (v) => `${v > 0 ? "+" : ""}${v} dB`,
+      disabled: !player.adjustable,
+      help: player.adjustable
+        ? "Heard as you drag it."
+        : "This cover's working files are gone, so its balance is fixed.",
+      onInput: (v) => { mix.gain = v; player.setBalance(v); markDirty(); },
+    });
+
+    const speed = Select({
+      label: "Speed",
+      options: SPEEDS,
+      value: "1",
+      onChange: (v) => {
+        mix.speed = Number(v);
+        player.setRate(mix.speed);
+        if (original) original.playbackRate = mix.speed;
+        markDirty();
+      },
+    });
+
+    degradeMix = () => {
+      balance.input.disabled = true;
+      const help = balance.querySelector(".field__help");
+      if (help) {
+        help.textContent = "This cover's working files are gone, so its balance is fixed.";
+      }
+      markDirty();
+    };
+
+    saveBtn.addEventListener("click", async () => {
+      saveBtn.disabled = true;
+      saveBtn.querySelector(".btn__label").textContent = "Saving…";
+      try {
+        const { cover } = await api.remix({
+          id: name,
+          vocalGainDb: mix.gain,
+          speed: mix.speed,
+          outputFormat: params.outputFormat || "mp3",
+        });
+        loadCovers();
+        saveBtn.querySelector(".btn__label").textContent = "Saved to Covers";
+        toast({ message: `Saved as ${cover?.title || "a new cover"}` });
+      } catch (err) {
+        markDirty();
+        toast({ message: err.message });
+      }
+    });
+
+    player.setBalance(mix.gain);
 
     resultSection.appendChild(el("div", { class: "runpanel" },
       el("div", { class: "t-body-em" }, "Cover generated"),
@@ -584,13 +715,21 @@ export function NewCoverFlow() {
             { path: job.result.path, name: `${song?.name || "cover"}` },
           ]) }),
         Button({ label: "Adjust and run again", variant: "tertiary",
+          tooltip: "For pitch and voice settings. Separation is reused, so it's quicker than the first run.",
           onClick: () => {
-            audio.pause();
+            player.destroy();
+            original?.pause();
+            resultPlayer = null;
             jobId = null;
             resultWave = null;
             paintResult();
             paintGenerate();
           } }),
+      ),
+      el("div", { class: "runpanel__mix" },
+        balance,
+        speed,
+        saveBtn,
       ),
     ));
   }
@@ -812,6 +951,7 @@ export function NewCoverFlow() {
     offDrag.forEach((f) => f());
     songSection.querySelector(".trimpanel")?.destroy?.();
     if (sourceBlobUrl) URL.revokeObjectURL(sourceBlobUrl);
+    resultPlayer?.destroy();
     resultWave?.destroy?.();
     setFlowDirtyCheck(null);
   };
