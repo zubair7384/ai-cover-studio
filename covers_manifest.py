@@ -55,18 +55,31 @@ MANIFEST_PATH = engine.DATA_DIR / "covers.json"
 # final_cover_20260717_024930.mp3
 _TIMESTAMP_RE = re.compile(r"(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})")
 
-# Every extension a cover can be exported as (engine.OUTPUT_FORMATS).
-COVER_GLOBS = ("final_cover_*.mp3", "final_cover_*.wav", "final_cover_*.flac")
+# Every filename either pipeline produces, in every format it can export as
+# (engine.OUTPUT_FORMATS). Both prefixes have to be here: anything this scan
+# misses gets flagged `missing` by reconcile() even though the file is right
+# there, which shows up in the UI as "Locate…" on a perfectly good clip.
+_OUTPUT_PREFIXES = ("final_cover", "speech")
+_OUTPUT_EXTS = ("mp3", "wav", "flac")
+COVER_GLOBS = tuple(f"{prefix}_*.{ext}"
+                    for prefix in _OUTPUT_PREFIXES
+                    for ext in _OUTPUT_EXTS)
 
 
 def _cover_files():
-    """Every cover on disk, whatever format it was exported as."""
+    """Every generated clip on disk, whatever format it was exported as."""
     seen = {}
     for pattern in COVER_GLOBS:
         for p in engine.OUTPUT_DIR.glob(pattern):
             seen[p.name] = p
     return seen
 
+
+# What produced the audio. Both kinds live in one manifest because they share
+# every downstream mechanism (player, export, rename, delete, Show in Finder);
+# the views filter on this field so spoken clips never clutter the covers list.
+KIND_COVER = "cover"
+KIND_SPEECH = "speech"
 
 ORIGIN_GENERATED = "generated"
 ORIGIN_LOCALSTORAGE = "localstorage"
@@ -173,9 +186,11 @@ def blank_record(name: str, *, origin: str) -> dict:
     path = engine.OUTPUT_DIR / name
     size, mtime = _stat(path)
     created = timestamp_from_name(name) or mtime
+    is_speech = name.startswith("speech_")
     return {
         "id": name,
-        "title": title_for(None, created),
+        "title": ("Spoken clip — " + time.strftime("%-d %b, %H:%M", time.localtime(created)))
+                 if is_speech else title_for(None, created),
         "sourceFileName": None,
         "sourcePath": None,
         "outputPath": str(path),
@@ -190,6 +205,13 @@ def blank_record(name: str, *, origin: str) -> dict:
         "outputFormat": path.suffix.lstrip(".").lower() or "mp3",
         "origin": origin,
         "missing": not path.exists(),
+        # Recovered from disk, so the filename prefix is the only evidence of
+        # which pipeline made it.
+        "kind": KIND_SPEECH if is_speech else KIND_COVER,
+        "text": None,
+        "speechVoice": None,
+        "speechRate": None,
+        "timings": None,
     }
 
 
@@ -211,6 +233,12 @@ def record_generation(
     trim_end: Optional[float] = None,
     vocal_gain_db: Optional[float] = None,
     speed: Optional[float] = None,
+    kind: str = KIND_COVER,
+    title: Optional[str] = None,
+    text: Optional[str] = None,
+    speech_voice: Optional[str] = None,
+    speech_rate: Optional[int] = None,
+    timings: Optional[list] = None,
 ) -> dict:
     """
     Called by the engine the moment a cover lands, with the parameters actually
@@ -223,7 +251,7 @@ def record_generation(
 
     record = {
         "id": output_path.name,
-        "title": title_for(source_file_name, created),
+        "title": (title or "").strip() or title_for(source_file_name, created),
         "sourceFileName": source_file_name,
         "sourcePath": source_path,
         "outputPath": str(output_path),
@@ -247,6 +275,14 @@ def record_generation(
         "trimEnd": trim_end,
         "vocalGainDb": vocal_gain_db,
         "speed": speed,
+        # Speech-only. The script is kept so "say it again with these settings"
+        # can pre-fill, which is the same payoff storing cover parameters gives.
+        "kind": kind,
+        "text": text,
+        "speechVoice": speech_voice,
+        "speechRate": speech_rate,
+        # Per-word spans into `text`, for the reading view's live highlight.
+        "timings": timings or None,
     }
 
     records = load()

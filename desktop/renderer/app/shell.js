@@ -11,14 +11,17 @@ import { PlayerBar } from "./player-bar.js";
 import { watchLibrary } from "./now-playing.js";
 import { getState, subscribe, setSidebarVisible } from "./store.js";
 import { titleFor } from "./router.js";
-import { CoversView } from "../screens/covers.js";
+import { CoversView, SpokenView } from "../screens/covers.js";
 import { VoicesView } from "../screens/voices.js";
 import { NewCoverFlow } from "../screens/new-cover.js";
+import { SpeakFlow } from "../screens/speak.js";
 import { TrainFlow } from "../screens/train.js";
 import { SettingsView } from "../settings/settings.js";
 
-const VIEWS = { covers: CoversView, voices: VoicesView };
-const FLOW_VIEWS = { "new-cover": NewCoverFlow, train: TrainFlow, settings: SettingsView };
+const VIEWS = { covers: CoversView, spoken: SpokenView, voices: VoicesView };
+const FLOW_VIEWS = {
+  "new-cover": NewCoverFlow, speak: SpeakFlow, train: TrainFlow, settings: SettingsView,
+};
 
 export function Shell() {
   const sidebar = Sidebar();

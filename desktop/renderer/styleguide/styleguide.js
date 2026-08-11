@@ -11,7 +11,7 @@ import { icon as makeIcon, iconNames } from "../lib/icons.js";
 import { ratio, passes } from "../lib/contrast.js";
 import {
   Button, IconButton, Segmented,
-  TextField, Select, Slider, Toggle, Checkbox,
+  TextField, Textarea, Select, Slider, Toggle, Checkbox,
   Badge, Separator, Spinner, EmptyState, Readout, Skeleton,
   attachTooltip, Popover, Menu, ContextMenu, Sheet,
 } from "../components/primitives/index.js";
@@ -173,6 +173,21 @@ function gallery() {
         invalid,
         TextField({ label: "Disabled", value: "Locked", disabled: true }),
         TextField({ search: true, placeholder: "Search", ariaLabel: "Search" }),
+      ),
+    ),
+    row("Textarea",
+      stack(
+        (() => {
+          const ta = Textarea({
+            label: "Script",
+            value: "Grows with its content, up to a cap.",
+            help: "Autogrows; counter turns red past the limit.",
+            counter: 120,
+            rows: 3,
+          });
+          queueMicrotask(() => ta.mounted?.());
+          return ta;
+        })(),
       ),
     ),
     row("Select",

@@ -318,7 +318,10 @@ function attachStyleguide(win) {
 
   win.webContents.on("did-finish-load", () => {
     win.webContents
-      .executeJavaScript(`import("${APP_ORIGIN}/dev/styleguide-entry.js")`)
+      // The trailing `.then(() => undefined)` keeps the module namespace object
+      // out of the return value — executeJavaScript structured-clones whatever
+      // the expression resolves to, and a Module is not cloneable.
+      .executeJavaScript(`import("${APP_ORIGIN}/dev/styleguide-entry.js").then(() => undefined)`)
       .catch((err) => console.error("[styleguide] inject failed:", err));
   });
 
@@ -458,6 +461,7 @@ function buildMenu() {
       label: "File",
       submenu: [
         { label: "New cover", accelerator: "CmdOrCtrl+N", click: () => send("new-cover") },
+        { label: "Speak", accelerator: "CmdOrCtrl+Shift+S", click: () => send("speak") },
         { label: "Train a voice", accelerator: "CmdOrCtrl+Shift+T", click: () => send("train") },
         { label: "Import voice…", click: () => send("import-voice") },
         { type: "separator" },
@@ -483,7 +487,8 @@ function buildMenu() {
       label: "View",
       submenu: [
         { label: "Covers", accelerator: "CmdOrCtrl+1", click: () => send("covers") },
-        { label: "Voices", accelerator: "CmdOrCtrl+2", click: () => send("voices") },
+        { label: "Spoken", accelerator: "CmdOrCtrl+2", click: () => send("spoken") },
+        { label: "Voices", accelerator: "CmdOrCtrl+3", click: () => send("voices") },
         { type: "separator" },
         { label: "Show/hide inspector", accelerator: "Alt+Command+I", click: () => send("toggle-inspector") },
         { label: "Show/hide sidebar", accelerator: "Control+Command+S", click: () => send("toggle-sidebar") },

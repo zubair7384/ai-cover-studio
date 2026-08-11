@@ -62,6 +62,9 @@ export const api = {
     post("/api/remix", { id, vocal_gain_db: vocalGainDb, speed,
                          output_format: outputFormat }),
 
+  /** OS speech voices + the engine's input limits. */
+  speechVoices: () => json("/api/speech/voices"),
+
   voices: () => json("/api/models/meta"),
   previewUrl: (name) => `${base}/api/models/preview/${encodeURIComponent(name)}`,
   createPreview: (modelName, referencePath) =>

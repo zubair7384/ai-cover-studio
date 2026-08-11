@@ -88,6 +88,74 @@ export function TextField({
   return wrap({ id, label, help, error }, input);
 }
 
+/* ---- Textarea ----------------------------------------------------------- */
+
+/**
+ * Multi-line text. Same chrome as TextField, but it grows with its content up
+ * to `maxRows` — a fixed-height box would either waste space on one line or
+ * make a long script scroll inside a small window for no reason.
+ *
+ * @param {number} [o.counter] when set, shows "used / counter" in mono and
+ *   marks the field invalid past the limit.
+ */
+export function Textarea({
+  label, value = "", placeholder, help, error, rows = 4, maxRows = 14,
+  counter, disabled = false, onInput, ariaLabel, ...rest
+} = {}) {
+  const id = uid("ta");
+  const input = el("textarea", {
+    id, rows, placeholder,
+    class: "input input--multiline",
+    disabled: disabled || undefined,
+    "aria-label": !label ? (ariaLabel || placeholder) : undefined,
+    "aria-describedby": help ? `${id}-help` : undefined,
+    ...rest,
+  });
+  input.value = value;
+
+  const node = wrap({ id, label, help, error }, input);
+
+  let count = null;
+  if (counter) {
+    count = Readout({ text: `0 / ${counter}` });
+    count.classList.add("field__counter");
+    // Sits under the box, beside the error, so neither shifts the layout.
+    node.insertBefore(count, node.errorNode);
+  }
+
+  const autogrow = () => {
+    input.style.height = "auto";
+    const line = parseFloat(getComputedStyle(input).lineHeight) || 18;
+    const max = line * maxRows;
+    input.style.height = `${Math.min(input.scrollHeight, max)}px`;
+    input.style.overflowY = input.scrollHeight > max ? "auto" : "hidden";
+  };
+
+  const paintCount = () => {
+    if (!count) return;
+    const n = input.value.length;
+    count.textContent = `${n.toLocaleString()} / ${counter.toLocaleString()}`;
+    count.dataset.over = n > counter ? "true" : "false";
+  };
+
+  input.addEventListener("input", (e) => {
+    autogrow();
+    paintCount();
+    onInput?.(e.target.value, e);
+  });
+
+  // The element has no layout until it is in the document, so the first grow
+  // has to wait for that rather than run here.
+  node.mounted = () => { autogrow(); paintCount(); };
+  node.setValue = (v) => {
+    input.value = v ?? "";
+    autogrow();
+    paintCount();
+  };
+  paintCount();
+  return node;
+}
+
 /* ---- Select ------------------------------------------------------------- */
 
 export function Select({

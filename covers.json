@@ -902,6 +902,1524 @@
       "trimEnd": 53.009236334612844,
       "vocalGainDb": 4.5,
       "speed": 0.75
+    },
+    "speech_20260811_162324.mp3": {
+      "id": "speech_20260811_162324.mp3",
+      "title": "Hello, this is Vocalis speaking a test line\u2026",
+      "sourceFileName": null,
+      "sourcePath": null,
+      "outputPath": "/Users/test/Developer/ai-cover-studio/outputs/speech_20260811_162324.mp3",
+      "voiceId": "zub",
+      "voiceName": "zub",
+      "createdAt": 1786447404.0,
+      "durationSec": 4.0,
+      "sizeBytes": 163047,
+      "pitchShift": 0,
+      "voiceCharacter": 0.75,
+      "sampleRate": null,
+      "outputFormat": "mp3",
+      "origin": "generated",
+      "missing": false,
+      "stems": null,
+      "stemSignature": null,
+      "trimStart": null,
+      "trimEnd": null,
+      "vocalGainDb": null,
+      "speed": 1.0,
+      "kind": "speech",
+      "text": "Hello, this is Vocalis speaking a test line in a trained voice.",
+      "speechVoice": "Rishi",
+      "speechRate": 175
+    },
+    "final_cover_20260810_152450.mp3": {
+      "id": "final_cover_20260810_152450.mp3",
+      "title": "Cover \u2014 10 Aug, 15:24",
+      "sourceFileName": null,
+      "sourcePath": null,
+      "outputPath": "/Users/test/Developer/ai-cover-studio/outputs/final_cover_20260810_152450.mp3",
+      "voiceId": null,
+      "voiceName": null,
+      "createdAt": 1786357490.0,
+      "durationSec": 46.251,
+      "sizeBytes": 1852647,
+      "pitchShift": null,
+      "voiceCharacter": null,
+      "sampleRate": null,
+      "outputFormat": "mp3",
+      "origin": "backfilled",
+      "missing": false,
+      "kind": "cover",
+      "text": null,
+      "speechVoice": null,
+      "speechRate": null
+    },
+    "final_cover_20260811_155515.mp3": {
+      "id": "final_cover_20260811_155515.mp3",
+      "title": "Cover \u2014 11 Aug, 15:55",
+      "sourceFileName": null,
+      "sourcePath": null,
+      "outputPath": "/Users/test/Developer/ai-cover-studio/outputs/final_cover_20260811_155515.mp3",
+      "voiceId": null,
+      "voiceName": null,
+      "createdAt": 1786445715.0,
+      "durationSec": 94.93,
+      "sizeBytes": 3800337,
+      "pitchShift": null,
+      "voiceCharacter": null,
+      "sampleRate": null,
+      "outputFormat": "mp3",
+      "origin": "backfilled",
+      "missing": false,
+      "kind": "cover",
+      "text": null,
+      "speechVoice": null,
+      "speechRate": null
+    },
+    "final_cover_20260811_155847.mp3": {
+      "id": "final_cover_20260811_155847.mp3",
+      "title": "Cover \u2014 11 Aug, 15:58",
+      "sourceFileName": null,
+      "sourcePath": null,
+      "outputPath": "/Users/test/Developer/ai-cover-studio/outputs/final_cover_20260811_155847.mp3",
+      "voiceId": null,
+      "voiceName": null,
+      "createdAt": 1786445927.0,
+      "durationSec": 54.244,
+      "sizeBytes": 2172386,
+      "pitchShift": null,
+      "voiceCharacter": null,
+      "sampleRate": null,
+      "outputFormat": "mp3",
+      "origin": "backfilled",
+      "missing": false,
+      "kind": "cover",
+      "text": null,
+      "speechVoice": null,
+      "speechRate": null
+    },
+    "final_cover_20260810_232203.mp3": {
+      "id": "final_cover_20260810_232203.mp3",
+      "title": "Cover \u2014 10 Aug, 23:22",
+      "sourceFileName": null,
+      "sourcePath": null,
+      "outputPath": "/Users/test/Developer/ai-cover-studio/outputs/final_cover_20260810_232203.mp3",
+      "voiceId": null,
+      "voiceName": null,
+      "createdAt": 1786386123.0,
+      "durationSec": 90.411,
+      "sizeBytes": 3619569,
+      "pitchShift": null,
+      "voiceCharacter": null,
+      "sampleRate": null,
+      "outputFormat": "mp3",
+      "origin": "backfilled",
+      "missing": false,
+      "kind": "cover",
+      "text": null,
+      "speechVoice": null,
+      "speechRate": null
+    },
+    "final_cover_20260810_233052.mp3": {
+      "id": "final_cover_20260810_233052.mp3",
+      "title": "Cover \u2014 10 Aug, 23:30",
+      "sourceFileName": null,
+      "sourcePath": null,
+      "outputPath": "/Users/test/Developer/ai-cover-studio/outputs/final_cover_20260810_233052.mp3",
+      "voiceId": null,
+      "voiceName": null,
+      "createdAt": 1786386652.0,
+      "durationSec": 396.005,
+      "sizeBytes": 15842786,
+      "pitchShift": null,
+      "voiceCharacter": null,
+      "sampleRate": null,
+      "outputFormat": "mp3",
+      "origin": "backfilled",
+      "missing": false,
+      "kind": "cover",
+      "text": null,
+      "speechVoice": null,
+      "speechRate": null
+    },
+    "speech_20260811_163841.mp3": {
+      "id": "speech_20260811_163841.mp3",
+      "title": "Granite and Echo The mountain holds its breath\u2026",
+      "sourceFileName": null,
+      "sourcePath": null,
+      "outputPath": "/Users/test/Developer/ai-cover-studio/outputs/speech_20260811_163841.mp3",
+      "voiceId": "trump",
+      "voiceName": "trump",
+      "createdAt": 1786448321.0,
+      "durationSec": 30.02,
+      "sizeBytes": 1203765,
+      "pitchShift": 0,
+      "voiceCharacter": 0.75,
+      "sampleRate": null,
+      "outputFormat": "mp3",
+      "origin": "generated",
+      "missing": false,
+      "stems": null,
+      "stemSignature": null,
+      "trimStart": null,
+      "trimEnd": null,
+      "vocalGainDb": null,
+      "speed": 1.0,
+      "kind": "speech",
+      "text": "Granite and Echo\n\nThe mountain holds its breath against the cold,\nA monolith of slate and quiet stone,\nWhere stories of the ancient earth are told\nIn languages of frost and wind alone.\n\nAbove the timberline, the shadows shift,\nThe blue hour hangs suspended in the air,\nWhile through the pass the quiet currents drift,\nUnconcerned with what is fleeting there.\n\nA sudden spark of daylight cuts the crest,\nIlluminating ridges silver-lined,\nAnd in that silent, towering arrest,\nThe noise of lower worlds is left behind.",
+      "speechVoice": "Daniel",
+      "speechRate": 175
+    },
+    "speech_20260811_164008.mp3": {
+      "id": "speech_20260811_164008.mp3",
+      "title": "Granite and Echo The mountain holds its breath\u2026",
+      "sourceFileName": null,
+      "sourcePath": null,
+      "outputPath": "/Users/test/Developer/ai-cover-studio/outputs/speech_20260811_164008.mp3",
+      "voiceId": "sonu-nigam",
+      "voiceName": "sonu-nigam",
+      "createdAt": 1786448408.0,
+      "durationSec": 30.02,
+      "sizeBytes": 1203765,
+      "pitchShift": 0,
+      "voiceCharacter": 0.75,
+      "sampleRate": null,
+      "outputFormat": "mp3",
+      "origin": "generated",
+      "missing": false,
+      "stems": null,
+      "stemSignature": null,
+      "trimStart": null,
+      "trimEnd": null,
+      "vocalGainDb": null,
+      "speed": 1.0,
+      "kind": "speech",
+      "text": "Granite and Echo\n\nThe mountain holds its breath against the cold,\nA monolith of slate and quiet stone,\nWhere stories of the ancient earth are told\nIn languages of frost and wind alone.\n\nAbove the timberline, the shadows shift,\nThe blue hour hangs suspended in the air,\nWhile through the pass the quiet currents drift,\nUnconcerned with what is fleeting there.\n\nA sudden spark of daylight cuts the crest,\nIlluminating ridges silver-lined,\nAnd in that silent, towering arrest,\nThe noise of lower worlds is left behind.",
+      "speechVoice": "Daniel",
+      "speechRate": 175
+    },
+    "speech_20260811_164045.mp3": {
+      "id": "speech_20260811_164045.mp3",
+      "title": "Granite and Echo The mountain holds its breath\u2026",
+      "sourceFileName": null,
+      "sourcePath": null,
+      "outputPath": "/Users/test/Developer/ai-cover-studio/outputs/speech_20260811_164045.mp3",
+      "voiceId": "zub",
+      "voiceName": "zub",
+      "createdAt": 1786448445.0,
+      "durationSec": 30.02,
+      "sizeBytes": 1203765,
+      "pitchShift": 0,
+      "voiceCharacter": 0.75,
+      "sampleRate": null,
+      "outputFormat": "mp3",
+      "origin": "generated",
+      "missing": false,
+      "stems": null,
+      "stemSignature": null,
+      "trimStart": null,
+      "trimEnd": null,
+      "vocalGainDb": null,
+      "speed": 1.0,
+      "kind": "speech",
+      "text": "Granite and Echo\n\nThe mountain holds its breath against the cold,\nA monolith of slate and quiet stone,\nWhere stories of the ancient earth are told\nIn languages of frost and wind alone.\n\nAbove the timberline, the shadows shift,\nThe blue hour hangs suspended in the air,\nWhile through the pass the quiet currents drift,\nUnconcerned with what is fleeting there.\n\nA sudden spark of daylight cuts the crest,\nIlluminating ridges silver-lined,\nAnd in that silent, towering arrest,\nThe noise of lower worlds is left behind.",
+      "speechVoice": "Daniel",
+      "speechRate": 175
+    },
+    "speech_20260811_164156.mp3": {
+      "id": "speech_20260811_164156.mp3",
+      "title": "Granite and Echo The mountain holds its breath\u2026",
+      "sourceFileName": null,
+      "sourcePath": null,
+      "outputPath": "/Users/test/Developer/ai-cover-studio/outputs/speech_20260811_164156.mp3",
+      "voiceId": "arijit",
+      "voiceName": "arijit",
+      "createdAt": 1786448516.0,
+      "durationSec": 32.06,
+      "sizeBytes": 1285267,
+      "pitchShift": 0,
+      "voiceCharacter": 0.75,
+      "sampleRate": null,
+      "outputFormat": "mp3",
+      "origin": "generated",
+      "missing": false,
+      "stems": null,
+      "stemSignature": null,
+      "trimStart": null,
+      "trimEnd": null,
+      "vocalGainDb": null,
+      "speed": 1.0,
+      "kind": "speech",
+      "text": "Granite and Echo\n\nThe mountain holds its breath against the cold,\nA monolith of slate and quiet stone,\nWhere stories of the ancient earth are told\nIn languages of frost and wind alone.\n\nAbove the timberline, the shadows shift,\nThe blue hour hangs suspended in the air,\nWhile through the pass the quiet currents drift,\nUnconcerned with what is fleeting there.\n\nA sudden spark of daylight cuts the crest,\nIlluminating ridges silver-lined,\nAnd in that silent, towering arrest,\nThe noise of lower worlds is left behind.",
+      "speechVoice": "Eddy (English (US))",
+      "speechRate": 175
+    },
+    "speech_20260811_164232.mp3": {
+      "id": "speech_20260811_164232.mp3",
+      "title": "Granite and Echo The mountain holds its breath\u2026",
+      "sourceFileName": null,
+      "sourcePath": null,
+      "outputPath": "/Users/test/Developer/ai-cover-studio/outputs/speech_20260811_164232.mp3",
+      "voiceId": "trump",
+      "voiceName": "trump",
+      "createdAt": 1786448552.0,
+      "durationSec": 32.06,
+      "sizeBytes": 1285267,
+      "pitchShift": 0,
+      "voiceCharacter": 0.75,
+      "sampleRate": null,
+      "outputFormat": "mp3",
+      "origin": "generated",
+      "missing": false,
+      "stems": null,
+      "stemSignature": null,
+      "trimStart": null,
+      "trimEnd": null,
+      "vocalGainDb": null,
+      "speed": 1.0,
+      "kind": "speech",
+      "text": "Granite and Echo\n\nThe mountain holds its breath against the cold,\nA monolith of slate and quiet stone,\nWhere stories of the ancient earth are told\nIn languages of frost and wind alone.\n\nAbove the timberline, the shadows shift,\nThe blue hour hangs suspended in the air,\nWhile through the pass the quiet currents drift,\nUnconcerned with what is fleeting there.\n\nA sudden spark of daylight cuts the crest,\nIlluminating ridges silver-lined,\nAnd in that silent, towering arrest,\nThe noise of lower worlds is left behind.",
+      "speechVoice": "Eddy (English (US))",
+      "speechRate": 175
+    },
+    "speech_20260811_164634.mp3": {
+      "id": "speech_20260811_164634.mp3",
+      "title": "\u0928\u092f\u093e \u0938\u0935\u0947\u0930\u093e \u0930\u093e\u0924 \u0915\u0947 \u0917\u0939\u0930\u0947 \u0905\u0901\u0927\u0947\u0930\u0947 \u0915\u094b \u091a\u0940\u0930\u0915\u0930\u2026",
+      "sourceFileName": null,
+      "sourcePath": null,
+      "outputPath": "/Users/test/Developer/ai-cover-studio/outputs/speech_20260811_164634.mp3",
+      "voiceId": "trump",
+      "voiceName": "trump",
+      "createdAt": 1786448794.0,
+      "durationSec": 5.12,
+      "sizeBytes": 206932,
+      "pitchShift": 0,
+      "voiceCharacter": 0.75,
+      "sampleRate": null,
+      "outputFormat": "mp3",
+      "origin": "generated",
+      "missing": false,
+      "stems": null,
+      "stemSignature": null,
+      "trimStart": null,
+      "trimEnd": null,
+      "vocalGainDb": null,
+      "speed": 1.0,
+      "kind": "speech",
+      "text": "\u0928\u092f\u093e \u0938\u0935\u0947\u0930\u093e\n\n\u0930\u093e\u0924 \u0915\u0947 \u0917\u0939\u0930\u0947 \u0905\u0901\u0927\u0947\u0930\u0947 \u0915\u094b \u091a\u0940\u0930\u0915\u0930,\n\u090f\u0915 \u0915\u093f\u0930\u0923 \u092b\u093f\u0930 \u092e\u0941\u0938\u094d\u0915\u0941\u0930\u093e\u0908 \u0939\u0948\u0964\n\u0938\u094b\u0908 \u0939\u0941\u0908 \u0907\u0938 \u0916\u093c\u093e\u092e\u094b\u0936\u0940 \u092e\u0947\u0902,\n\u0909\u092e\u094d\u092e\u0940\u0926 \u0915\u0940 \u0928\u0908 \u0906\u0939\u091f \u0906\u0908 \u0939\u0948\u0964\n\n\u091c\u094b \u0930\u093e\u0938\u094d\u0924\u0947 \u0915\u0932 \u0924\u0915 \u0927\u0941\u0902\u0927 \u0938\u0947 \u0922\u0915\u0947 \u0925\u0947,\n\u0909\u0928\u092a\u0930 \u0905\u092c \u0927\u0942\u092a \u0928\u093f\u0916\u0930\u0928\u0947 \u0932\u0917\u0940\u0964\n\u092e\u0941\u091d\u0938\u0947 \u0909\u0932\u091d\u0924\u0940 \u0939\u0935\u093e\u090f\u0901 \u092d\u0940 \u0905\u092c,\n\u090f\u0915 \u092e\u0940\u0920\u093e \u0938\u093e\u091c\u093c \u092c\u0928\u0915\u0930 \u092c\u093f\u0916\u0930\u0928\u0947 \u0932\u0917\u0940\u0964\n\n\u0928\u093e \u0930\u0941\u0915\u0928\u093e \u0939\u0948, \u0928\u093e \u091d\u0941\u0915\u0928\u093e \u0939\u0948 \u092e\u0941\u091d\u0947,\n\u091a\u093e\u0939\u0947 \u0930\u093e\u0939\u0947\u0902 \u0915\u093f\u0924\u0928\u0940 \u092d\u0940 \u0905\u0928\u091c\u093e\u0928\u0940 \u0939\u094b\u0902\u0964\n\u0939\u0930 \u0915\u0926\u092e \u092a\u0930 \u090f\u0915 \u0928\u092f\u093e \u0939\u094c\u0938\u0932\u093e \u0939\u0948,\n\u0939\u0930 \u092e\u094b\u0921\u093c \u092a\u0930 \u0928\u0908 \u0915\u0939\u093e\u0928\u0940 \u0939\u094b\u0964\n\n\u0909\u0920\u094b \u0915\u093f \u0938\u0942\u0930\u091c \u0924\u0941\u092e\u094d\u0939\u0947\u0902 \u092a\u0941\u0915\u093e\u0930 \u0930\u0939\u093e,\n\u0906\u0938\u092e\u093e\u0902 \u092d\u0940 \u091c\u093c\u092e\u0940\u0928 \u092a\u0930 \u091d\u0941\u0915\u0928\u0947 \u0906\u092f\u093e \u0939\u0948\u0964\n\u0906\u091c \u092b\u093f\u0930 \u090f\u0915 \u091b\u094b\u091f\u0947 \u0938\u0947 \u0926\u0940\u092f\u0947 \u0928\u0947,\n\u0905\u0901\u0927\u0947\u0930\u0947 \u0915\u094b \u0939\u0930\u093e\u0928\u0947 \u0915\u093e \u0938\u0902\u0915\u0932\u094d\u092a \u0909\u0920\u093e\u092f\u093e \u0939\u0948\u0964",
+      "speechVoice": "Daniel",
+      "speechRate": 175
+    },
+    "speech_20260811_165033.mp3": {
+      "id": "speech_20260811_165033.mp3",
+      "title": "Granite and Echo The mountain holds its breath\u2026",
+      "sourceFileName": null,
+      "sourcePath": null,
+      "outputPath": "/Users/test/Developer/ai-cover-studio/outputs/speech_20260811_165033.mp3",
+      "voiceId": "trump",
+      "voiceName": "trump",
+      "createdAt": 1786449033.0,
+      "durationSec": 33.22,
+      "sizeBytes": 1331243,
+      "pitchShift": 0,
+      "voiceCharacter": 0.75,
+      "sampleRate": null,
+      "outputFormat": "mp3",
+      "origin": "generated",
+      "missing": false,
+      "stems": null,
+      "stemSignature": null,
+      "trimStart": null,
+      "trimEnd": null,
+      "vocalGainDb": null,
+      "speed": 1.0,
+      "kind": "speech",
+      "text": "Granite and Echo\n\nThe mountain holds its breath against the cold,\nA monolith of slate and quiet stone,\nWhere stories of the ancient earth are told\nIn languages of frost and wind alone.\n\nAbove the timberline, the shadows shift,\nThe blue hour hangs suspended in the air,\nWhile through the pass the quiet currents drift,\nUnconcerned with what is fleeting there.\n\nA sudden spark of daylight cuts the crest,\nIlluminating ridges silver-lined,\nAnd in that silent, towering arrest,\nThe noise of lower worlds is left behind.",
+      "speechVoice": "Eddy (English (US))",
+      "speechRate": 175,
+      "timings": [
+        {
+          "start": 0.0698,
+          "end": 0.4289,
+          "charStart": 0,
+          "charEnd": 7
+        },
+        {
+          "start": 0.4289,
+          "end": 0.6085,
+          "charStart": 8,
+          "charEnd": 11
+        },
+        {
+          "start": 0.6085,
+          "end": 0.9676,
+          "charStart": 12,
+          "charEnd": 16
+        },
+        {
+          "start": 1.4052,
+          "end": 1.6508,
+          "charStart": 18,
+          "charEnd": 21
+        },
+        {
+          "start": 1.6508,
+          "end": 2.142,
+          "charStart": 22,
+          "charEnd": 30
+        },
+        {
+          "start": 2.142,
+          "end": 2.3876,
+          "charStart": 31,
+          "charEnd": 36
+        },
+        {
+          "start": 2.3876,
+          "end": 2.6333,
+          "charStart": 37,
+          "charEnd": 40
+        },
+        {
+          "start": 2.6333,
+          "end": 2.8788,
+          "charStart": 41,
+          "charEnd": 47
+        },
+        {
+          "start": 2.8788,
+          "end": 3.3701,
+          "charStart": 48,
+          "charEnd": 55
+        },
+        {
+          "start": 3.3701,
+          "end": 3.6156,
+          "charStart": 56,
+          "charEnd": 59
+        },
+        {
+          "start": 3.6156,
+          "end": 4.0086,
+          "charStart": 60,
+          "charEnd": 65
+        },
+        {
+          "start": 4.2032,
+          "end": 4.4349,
+          "charStart": 66,
+          "charEnd": 67
+        },
+        {
+          "start": 4.4349,
+          "end": 5.1301,
+          "charStart": 68,
+          "charEnd": 76
+        },
+        {
+          "start": 5.1301,
+          "end": 5.3617,
+          "charStart": 77,
+          "charEnd": 79
+        },
+        {
+          "start": 5.3617,
+          "end": 5.5934,
+          "charStart": 80,
+          "charEnd": 85
+        },
+        {
+          "start": 5.5934,
+          "end": 5.8252,
+          "charStart": 86,
+          "charEnd": 89
+        },
+        {
+          "start": 5.8252,
+          "end": 6.0568,
+          "charStart": 90,
+          "charEnd": 95
+        },
+        {
+          "start": 6.0568,
+          "end": 6.4276,
+          "charStart": 96,
+          "charEnd": 102
+        },
+        {
+          "start": 6.6172,
+          "end": 6.8515,
+          "charStart": 103,
+          "charEnd": 108
+        },
+        {
+          "start": 6.8515,
+          "end": 7.3204,
+          "charStart": 109,
+          "charEnd": 116
+        },
+        {
+          "start": 7.3204,
+          "end": 7.5548,
+          "charStart": 117,
+          "charEnd": 119
+        },
+        {
+          "start": 7.5548,
+          "end": 7.7892,
+          "charStart": 120,
+          "charEnd": 123
+        },
+        {
+          "start": 7.7892,
+          "end": 8.258,
+          "charStart": 124,
+          "charEnd": 131
+        },
+        {
+          "start": 8.258,
+          "end": 8.4924,
+          "charStart": 132,
+          "charEnd": 137
+        },
+        {
+          "start": 8.4924,
+          "end": 8.7269,
+          "charStart": 138,
+          "charEnd": 141
+        },
+        {
+          "start": 8.7269,
+          "end": 8.9612,
+          "charStart": 142,
+          "charEnd": 146
+        },
+        {
+          "start": 9.3988,
+          "end": 9.6091,
+          "charStart": 147,
+          "charEnd": 149
+        },
+        {
+          "start": 9.6091,
+          "end": 10.2396,
+          "charStart": 150,
+          "charEnd": 159
+        },
+        {
+          "start": 10.2396,
+          "end": 10.4498,
+          "charStart": 160,
+          "charEnd": 162
+        },
+        {
+          "start": 10.4498,
+          "end": 10.66,
+          "charStart": 163,
+          "charEnd": 168
+        },
+        {
+          "start": 10.66,
+          "end": 10.8702,
+          "charStart": 169,
+          "charEnd": 172
+        },
+        {
+          "start": 10.8702,
+          "end": 11.0803,
+          "charStart": 173,
+          "charEnd": 177
+        },
+        {
+          "start": 11.0803,
+          "end": 11.753,
+          "charStart": 178,
+          "charEnd": 184
+        },
+        {
+          "start": 12.1968,
+          "end": 12.6616,
+          "charStart": 186,
+          "charEnd": 191
+        },
+        {
+          "start": 12.6616,
+          "end": 12.8941,
+          "charStart": 192,
+          "charEnd": 195
+        },
+        {
+          "start": 12.8941,
+          "end": 13.7309,
+          "charStart": 196,
+          "charEnd": 207
+        },
+        {
+          "start": 13.7309,
+          "end": 13.9633,
+          "charStart": 208,
+          "charEnd": 211
+        },
+        {
+          "start": 13.9633,
+          "end": 14.4283,
+          "charStart": 212,
+          "charEnd": 219
+        },
+        {
+          "start": 14.4283,
+          "end": 14.8002,
+          "charStart": 220,
+          "charEnd": 226
+        },
+        {
+          "start": 14.9466,
+          "end": 15.163,
+          "charStart": 227,
+          "charEnd": 230
+        },
+        {
+          "start": 15.163,
+          "end": 15.3795,
+          "charStart": 231,
+          "charEnd": 235
+        },
+        {
+          "start": 15.3795,
+          "end": 15.5959,
+          "charStart": 236,
+          "charEnd": 240
+        },
+        {
+          "start": 15.5959,
+          "end": 15.8124,
+          "charStart": 241,
+          "charEnd": 246
+        },
+        {
+          "start": 15.8124,
+          "end": 16.4616,
+          "charStart": 247,
+          "charEnd": 256
+        },
+        {
+          "start": 16.4616,
+          "end": 16.6781,
+          "charStart": 257,
+          "charEnd": 259
+        },
+        {
+          "start": 16.6781,
+          "end": 16.8945,
+          "charStart": 260,
+          "charEnd": 263
+        },
+        {
+          "start": 16.8945,
+          "end": 17.2408,
+          "charStart": 264,
+          "charEnd": 268
+        },
+        {
+          "start": 17.4087,
+          "end": 17.6819,
+          "charStart": 269,
+          "charEnd": 274
+        },
+        {
+          "start": 17.6819,
+          "end": 17.9553,
+          "charStart": 275,
+          "charEnd": 282
+        },
+        {
+          "start": 17.9553,
+          "end": 18.2285,
+          "charStart": 283,
+          "charEnd": 286
+        },
+        {
+          "start": 18.2285,
+          "end": 18.5017,
+          "charStart": 287,
+          "charEnd": 291
+        },
+        {
+          "start": 18.5017,
+          "end": 18.7751,
+          "charStart": 292,
+          "charEnd": 295
+        },
+        {
+          "start": 18.7751,
+          "end": 19.0483,
+          "charStart": 296,
+          "charEnd": 301
+        },
+        {
+          "start": 19.0483,
+          "end": 19.5949,
+          "charStart": 302,
+          "charEnd": 310
+        },
+        {
+          "start": 19.5949,
+          "end": 20.0321,
+          "charStart": 311,
+          "charEnd": 317
+        },
+        {
+          "start": 20.1743,
+          "end": 20.9117,
+          "charStart": 318,
+          "charEnd": 329
+        },
+        {
+          "start": 20.9117,
+          "end": 21.0961,
+          "charStart": 330,
+          "charEnd": 334
+        },
+        {
+          "start": 21.0961,
+          "end": 21.2805,
+          "charStart": 335,
+          "charEnd": 339
+        },
+        {
+          "start": 21.2805,
+          "end": 21.4648,
+          "charStart": 340,
+          "charEnd": 342
+        },
+        {
+          "start": 21.4648,
+          "end": 21.8335,
+          "charStart": 343,
+          "charEnd": 351
+        },
+        {
+          "start": 21.8335,
+          "end": 22.2391,
+          "charStart": 352,
+          "charEnd": 358
+        },
+        {
+          "start": 22.6682,
+          "end": 22.9054,
+          "charStart": 360,
+          "charEnd": 361
+        },
+        {
+          "start": 22.9054,
+          "end": 23.3797,
+          "charStart": 362,
+          "charEnd": 368
+        },
+        {
+          "start": 23.3797,
+          "end": 23.6168,
+          "charStart": 369,
+          "charEnd": 374
+        },
+        {
+          "start": 23.6168,
+          "end": 23.8539,
+          "charStart": 375,
+          "charEnd": 377
+        },
+        {
+          "start": 23.8539,
+          "end": 24.3282,
+          "charStart": 378,
+          "charEnd": 386
+        },
+        {
+          "start": 24.3282,
+          "end": 24.5654,
+          "charStart": 387,
+          "charEnd": 391
+        },
+        {
+          "start": 24.5654,
+          "end": 24.8025,
+          "charStart": 392,
+          "charEnd": 395
+        },
+        {
+          "start": 24.8025,
+          "end": 25.1819,
+          "charStart": 396,
+          "charEnd": 402
+        },
+        {
+          "start": 25.3382,
+          "end": 26.2239,
+          "charStart": 403,
+          "charEnd": 415
+        },
+        {
+          "start": 26.2239,
+          "end": 26.5781,
+          "charStart": 416,
+          "charEnd": 422
+        },
+        {
+          "start": 26.5781,
+          "end": 27.393,
+          "charStart": 423,
+          "charEnd": 436
+        },
+        {
+          "start": 27.6401,
+          "end": 27.8619,
+          "charStart": 437,
+          "charEnd": 440
+        },
+        {
+          "start": 27.8619,
+          "end": 28.0836,
+          "charStart": 441,
+          "charEnd": 443
+        },
+        {
+          "start": 28.0836,
+          "end": 28.3055,
+          "charStart": 444,
+          "charEnd": 448
+        },
+        {
+          "start": 28.3055,
+          "end": 28.882,
+          "charStart": 449,
+          "charEnd": 456
+        },
+        {
+          "start": 28.882,
+          "end": 29.5473,
+          "charStart": 457,
+          "charEnd": 465
+        },
+        {
+          "start": 29.5473,
+          "end": 30.1239,
+          "charStart": 466,
+          "charEnd": 473
+        },
+        {
+          "start": 30.2781,
+          "end": 30.4971,
+          "charStart": 474,
+          "charEnd": 477
+        },
+        {
+          "start": 30.4971,
+          "end": 30.7162,
+          "charStart": 478,
+          "charEnd": 483
+        },
+        {
+          "start": 30.7162,
+          "end": 30.9353,
+          "charStart": 484,
+          "charEnd": 486
+        },
+        {
+          "start": 30.9353,
+          "end": 31.3735,
+          "charStart": 487,
+          "charEnd": 492
+        },
+        {
+          "start": 31.3735,
+          "end": 31.5926,
+          "charStart": 493,
+          "charEnd": 499
+        },
+        {
+          "start": 31.5926,
+          "end": 31.8117,
+          "charStart": 500,
+          "charEnd": 502
+        },
+        {
+          "start": 31.8117,
+          "end": 32.0308,
+          "charStart": 503,
+          "charEnd": 507
+        },
+        {
+          "start": 32.0308,
+          "end": 32.7319,
+          "charStart": 508,
+          "charEnd": 515
+        }
+      ]
+    },
+    "speech_20260811_165419.mp3": {
+      "id": "speech_20260811_165419.mp3",
+      "title": "The mountain holds its breath against the cold\u2026",
+      "sourceFileName": null,
+      "sourcePath": null,
+      "outputPath": "/Users/test/Developer/ai-cover-studio/outputs/speech_20260811_165419.mp3",
+      "voiceId": "zub",
+      "voiceName": "zub",
+      "createdAt": 1786449259.0,
+      "durationSec": 4.54,
+      "sizeBytes": 183945,
+      "pitchShift": 0,
+      "voiceCharacter": 0.75,
+      "sampleRate": null,
+      "outputFormat": "mp3",
+      "origin": "generated",
+      "missing": false,
+      "stems": null,
+      "stemSignature": null,
+      "trimStart": null,
+      "trimEnd": null,
+      "vocalGainDb": null,
+      "speed": 1.0,
+      "kind": "speech",
+      "text": "The mountain holds its breath against the cold,\nA monolith of slate and quiet stone.",
+      "speechVoice": "Daniel",
+      "speechRate": 175,
+      "timings": [
+        {
+          "start": 0.0099,
+          "end": 0.2346,
+          "charStart": 0,
+          "charEnd": 3
+        },
+        {
+          "start": 0.2346,
+          "end": 0.6838,
+          "charStart": 4,
+          "charEnd": 12
+        },
+        {
+          "start": 0.6838,
+          "end": 0.9084,
+          "charStart": 13,
+          "charEnd": 18
+        },
+        {
+          "start": 0.9084,
+          "end": 1.133,
+          "charStart": 19,
+          "charEnd": 22
+        },
+        {
+          "start": 1.133,
+          "end": 1.3577,
+          "charStart": 23,
+          "charEnd": 29
+        },
+        {
+          "start": 1.3577,
+          "end": 1.8069,
+          "charStart": 30,
+          "charEnd": 37
+        },
+        {
+          "start": 1.8069,
+          "end": 2.0315,
+          "charStart": 38,
+          "charEnd": 41
+        },
+        {
+          "start": 2.0315,
+          "end": 2.3909,
+          "charStart": 42,
+          "charEnd": 47
+        },
+        {
+          "start": 2.4242,
+          "end": 2.6284,
+          "charStart": 48,
+          "charEnd": 49
+        },
+        {
+          "start": 2.6284,
+          "end": 3.2412,
+          "charStart": 50,
+          "charEnd": 58
+        },
+        {
+          "start": 3.2412,
+          "end": 3.4455,
+          "charStart": 59,
+          "charEnd": 61
+        },
+        {
+          "start": 3.4455,
+          "end": 3.6497,
+          "charStart": 62,
+          "charEnd": 67
+        },
+        {
+          "start": 3.6497,
+          "end": 3.854,
+          "charStart": 68,
+          "charEnd": 71
+        },
+        {
+          "start": 3.854,
+          "end": 4.0582,
+          "charStart": 72,
+          "charEnd": 77
+        },
+        {
+          "start": 4.0582,
+          "end": 4.5075,
+          "charStart": 78,
+          "charEnd": 84
+        }
+      ]
+    },
+    "speech_20260811_165437.mp3": {
+      "id": "speech_20260811_165437.mp3",
+      "title": "Granite and Echo The mountain holds its breath\u2026",
+      "sourceFileName": null,
+      "sourcePath": null,
+      "outputPath": "/Users/test/Developer/ai-cover-studio/outputs/speech_20260811_165437.mp3",
+      "voiceId": "trump",
+      "voiceName": "trump",
+      "createdAt": 1786449277.0,
+      "durationSec": 28.32,
+      "sizeBytes": 1135847,
+      "pitchShift": 0,
+      "voiceCharacter": 0.75,
+      "sampleRate": null,
+      "outputFormat": "mp3",
+      "origin": "generated",
+      "missing": false,
+      "stems": null,
+      "stemSignature": null,
+      "trimStart": null,
+      "trimEnd": null,
+      "vocalGainDb": null,
+      "speed": 1.0,
+      "kind": "speech",
+      "text": "Granite and Echo\n\nThe mountain holds its breath against the cold,\nA monolith of slate and quiet stone,\nWhere stories of the ancient earth are told\nIn languages of frost and wind alone.\n\nAbove the timberline, the shadows shift,\nThe blue hour hangs suspended in the air,\nWhile through the pass the quiet currents drift,\nUnconcerned with what is fleeting there.\n\nA sudden spark of daylight cuts the crest,\nIlluminating ridges silver-lined,\nAnd in that silent, towering arrest,\nThe noise of lower worlds is left behind.",
+      "speechVoice": "Daniel",
+      "speechRate": 175,
+      "timings": [
+        {
+          "start": 0.0,
+          "end": 0.383,
+          "charStart": 0,
+          "charEnd": 7
+        },
+        {
+          "start": 0.383,
+          "end": 0.5745,
+          "charStart": 8,
+          "charEnd": 11
+        },
+        {
+          "start": 0.5745,
+          "end": 0.9575,
+          "charStart": 12,
+          "charEnd": 16
+        },
+        {
+          "start": 0.9875,
+          "end": 1.2133,
+          "charStart": 18,
+          "charEnd": 21
+        },
+        {
+          "start": 1.2133,
+          "end": 1.6649,
+          "charStart": 22,
+          "charEnd": 30
+        },
+        {
+          "start": 1.6649,
+          "end": 1.8907,
+          "charStart": 31,
+          "charEnd": 36
+        },
+        {
+          "start": 1.8907,
+          "end": 2.1166,
+          "charStart": 37,
+          "charEnd": 40
+        },
+        {
+          "start": 2.1166,
+          "end": 2.3424,
+          "charStart": 41,
+          "charEnd": 47
+        },
+        {
+          "start": 2.3424,
+          "end": 2.794,
+          "charStart": 48,
+          "charEnd": 55
+        },
+        {
+          "start": 2.794,
+          "end": 3.0199,
+          "charStart": 56,
+          "charEnd": 59
+        },
+        {
+          "start": 3.0199,
+          "end": 3.3811,
+          "charStart": 60,
+          "charEnd": 65
+        },
+        {
+          "start": 3.4146,
+          "end": 3.6327,
+          "charStart": 66,
+          "charEnd": 67
+        },
+        {
+          "start": 3.6327,
+          "end": 4.2873,
+          "charStart": 68,
+          "charEnd": 76
+        },
+        {
+          "start": 4.2873,
+          "end": 4.5055,
+          "charStart": 77,
+          "charEnd": 79
+        },
+        {
+          "start": 4.5055,
+          "end": 4.7237,
+          "charStart": 80,
+          "charEnd": 85
+        },
+        {
+          "start": 4.7237,
+          "end": 4.9419,
+          "charStart": 86,
+          "charEnd": 89
+        },
+        {
+          "start": 4.9419,
+          "end": 5.16,
+          "charStart": 90,
+          "charEnd": 95
+        },
+        {
+          "start": 5.16,
+          "end": 5.5091,
+          "charStart": 96,
+          "charEnd": 102
+        },
+        {
+          "start": 5.5417,
+          "end": 5.7691,
+          "charStart": 103,
+          "charEnd": 108
+        },
+        {
+          "start": 5.7691,
+          "end": 6.2239,
+          "charStart": 109,
+          "charEnd": 116
+        },
+        {
+          "start": 6.2239,
+          "end": 6.4514,
+          "charStart": 117,
+          "charEnd": 119
+        },
+        {
+          "start": 6.4514,
+          "end": 6.6787,
+          "charStart": 120,
+          "charEnd": 123
+        },
+        {
+          "start": 6.6787,
+          "end": 7.1335,
+          "charStart": 124,
+          "charEnd": 131
+        },
+        {
+          "start": 7.1335,
+          "end": 7.361,
+          "charStart": 132,
+          "charEnd": 137
+        },
+        {
+          "start": 7.361,
+          "end": 7.5884,
+          "charStart": 138,
+          "charEnd": 141
+        },
+        {
+          "start": 7.5884,
+          "end": 7.8158,
+          "charStart": 142,
+          "charEnd": 146
+        },
+        {
+          "start": 7.8535,
+          "end": 8.0423,
+          "charStart": 147,
+          "charEnd": 149
+        },
+        {
+          "start": 8.0423,
+          "end": 8.6087,
+          "charStart": 150,
+          "charEnd": 159
+        },
+        {
+          "start": 8.6087,
+          "end": 8.7975,
+          "charStart": 160,
+          "charEnd": 162
+        },
+        {
+          "start": 8.7975,
+          "end": 8.9863,
+          "charStart": 163,
+          "charEnd": 168
+        },
+        {
+          "start": 8.9863,
+          "end": 9.175,
+          "charStart": 169,
+          "charEnd": 172
+        },
+        {
+          "start": 9.175,
+          "end": 9.3639,
+          "charStart": 173,
+          "charEnd": 177
+        },
+        {
+          "start": 9.3639,
+          "end": 9.968,
+          "charStart": 178,
+          "charEnd": 184
+        },
+        {
+          "start": 10.0038,
+          "end": 10.4277,
+          "charStart": 186,
+          "charEnd": 191
+        },
+        {
+          "start": 10.4277,
+          "end": 10.6396,
+          "charStart": 192,
+          "charEnd": 195
+        },
+        {
+          "start": 10.6396,
+          "end": 11.4027,
+          "charStart": 196,
+          "charEnd": 207
+        },
+        {
+          "start": 11.4027,
+          "end": 11.6146,
+          "charStart": 208,
+          "charEnd": 211
+        },
+        {
+          "start": 11.6146,
+          "end": 12.0384,
+          "charStart": 212,
+          "charEnd": 219
+        },
+        {
+          "start": 12.0384,
+          "end": 12.3776,
+          "charStart": 220,
+          "charEnd": 226
+        },
+        {
+          "start": 12.4078,
+          "end": 12.6082,
+          "charStart": 227,
+          "charEnd": 230
+        },
+        {
+          "start": 12.6082,
+          "end": 12.8087,
+          "charStart": 231,
+          "charEnd": 235
+        },
+        {
+          "start": 12.8087,
+          "end": 13.0091,
+          "charStart": 236,
+          "charEnd": 240
+        },
+        {
+          "start": 13.0091,
+          "end": 13.2095,
+          "charStart": 241,
+          "charEnd": 246
+        },
+        {
+          "start": 13.2095,
+          "end": 13.8107,
+          "charStart": 247,
+          "charEnd": 256
+        },
+        {
+          "start": 13.8107,
+          "end": 14.0112,
+          "charStart": 257,
+          "charEnd": 259
+        },
+        {
+          "start": 14.0112,
+          "end": 14.2116,
+          "charStart": 260,
+          "charEnd": 263
+        },
+        {
+          "start": 14.2116,
+          "end": 14.5323,
+          "charStart": 264,
+          "charEnd": 268
+        },
+        {
+          "start": 14.5544,
+          "end": 14.8037,
+          "charStart": 269,
+          "charEnd": 274
+        },
+        {
+          "start": 14.8037,
+          "end": 15.053,
+          "charStart": 275,
+          "charEnd": 282
+        },
+        {
+          "start": 15.053,
+          "end": 15.3024,
+          "charStart": 283,
+          "charEnd": 286
+        },
+        {
+          "start": 15.3024,
+          "end": 15.5517,
+          "charStart": 287,
+          "charEnd": 291
+        },
+        {
+          "start": 15.5517,
+          "end": 15.801,
+          "charStart": 292,
+          "charEnd": 295
+        },
+        {
+          "start": 15.801,
+          "end": 16.0504,
+          "charStart": 296,
+          "charEnd": 301
+        },
+        {
+          "start": 16.0504,
+          "end": 16.5491,
+          "charStart": 302,
+          "charEnd": 310
+        },
+        {
+          "start": 16.5491,
+          "end": 16.948,
+          "charStart": 311,
+          "charEnd": 317
+        },
+        {
+          "start": 16.9706,
+          "end": 17.7329,
+          "charStart": 318,
+          "charEnd": 329
+        },
+        {
+          "start": 17.7329,
+          "end": 17.9235,
+          "charStart": 330,
+          "charEnd": 334
+        },
+        {
+          "start": 17.9235,
+          "end": 18.114,
+          "charStart": 335,
+          "charEnd": 339
+        },
+        {
+          "start": 18.114,
+          "end": 18.3046,
+          "charStart": 340,
+          "charEnd": 342
+        },
+        {
+          "start": 18.3046,
+          "end": 18.6857,
+          "charStart": 343,
+          "charEnd": 351
+        },
+        {
+          "start": 18.6857,
+          "end": 19.105,
+          "charStart": 352,
+          "charEnd": 358
+        },
+        {
+          "start": 19.1209,
+          "end": 19.3552,
+          "charStart": 360,
+          "charEnd": 361
+        },
+        {
+          "start": 19.3552,
+          "end": 19.8237,
+          "charStart": 362,
+          "charEnd": 368
+        },
+        {
+          "start": 19.8237,
+          "end": 20.0581,
+          "charStart": 369,
+          "charEnd": 374
+        },
+        {
+          "start": 20.0581,
+          "end": 20.2924,
+          "charStart": 375,
+          "charEnd": 377
+        },
+        {
+          "start": 20.2924,
+          "end": 20.7609,
+          "charStart": 378,
+          "charEnd": 386
+        },
+        {
+          "start": 20.7609,
+          "end": 20.9952,
+          "charStart": 387,
+          "charEnd": 391
+        },
+        {
+          "start": 20.9952,
+          "end": 21.2296,
+          "charStart": 392,
+          "charEnd": 395
+        },
+        {
+          "start": 21.2296,
+          "end": 21.6044,
+          "charStart": 396,
+          "charEnd": 402
+        },
+        {
+          "start": 21.6194,
+          "end": 22.4663,
+          "charStart": 403,
+          "charEnd": 415
+        },
+        {
+          "start": 22.4663,
+          "end": 22.8051,
+          "charStart": 416,
+          "charEnd": 422
+        },
+        {
+          "start": 22.8051,
+          "end": 23.5842,
+          "charStart": 423,
+          "charEnd": 436
+        },
+        {
+          "start": 23.6188,
+          "end": 23.8237,
+          "charStart": 437,
+          "charEnd": 440
+        },
+        {
+          "start": 23.8237,
+          "end": 24.0285,
+          "charStart": 441,
+          "charEnd": 443
+        },
+        {
+          "start": 24.0285,
+          "end": 24.2333,
+          "charStart": 444,
+          "charEnd": 448
+        },
+        {
+          "start": 24.2333,
+          "end": 24.7658,
+          "charStart": 449,
+          "charEnd": 456
+        },
+        {
+          "start": 24.7658,
+          "end": 25.3803,
+          "charStart": 457,
+          "charEnd": 465
+        },
+        {
+          "start": 25.3803,
+          "end": 25.9128,
+          "charStart": 466,
+          "charEnd": 473
+        },
+        {
+          "start": 25.9416,
+          "end": 26.15,
+          "charStart": 474,
+          "charEnd": 477
+        },
+        {
+          "start": 26.15,
+          "end": 26.3584,
+          "charStart": 478,
+          "charEnd": 483
+        },
+        {
+          "start": 26.3584,
+          "end": 26.5667,
+          "charStart": 484,
+          "charEnd": 486
+        },
+        {
+          "start": 26.5667,
+          "end": 26.9835,
+          "charStart": 487,
+          "charEnd": 492
+        },
+        {
+          "start": 26.9835,
+          "end": 27.1919,
+          "charStart": 493,
+          "charEnd": 499
+        },
+        {
+          "start": 27.1919,
+          "end": 27.4003,
+          "charStart": 500,
+          "charEnd": 502
+        },
+        {
+          "start": 27.4003,
+          "end": 27.6087,
+          "charStart": 503,
+          "charEnd": 507
+        },
+        {
+          "start": 27.6087,
+          "end": 28.2755,
+          "charStart": 508,
+          "charEnd": 515
+        }
+      ]
     }
   }
 }

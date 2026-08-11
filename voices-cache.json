@@ -25,5 +25,23 @@
     "author": null,
     "createdAt": "2026-07-10T17:32:55.188011",
     "datasetLength": null
+  },
+  "sonu-nigam.pth": {
+    "_stamp": "55224656:1786385943",
+    "sampleRate": 40000,
+    "architecture": "v2",
+    "epochs": null,
+    "author": null,
+    "createdAt": null,
+    "datasetLength": null
+  },
+  "trump.pth": {
+    "_stamp": "55231605:1786445570",
+    "sampleRate": 40000,
+    "architecture": "v2",
+    "epochs": null,
+    "author": null,
+    "createdAt": null,
+    "datasetLength": null
   }
 }

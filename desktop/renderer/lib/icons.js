@@ -30,6 +30,8 @@ const PATHS = {
   headphones: '<path d="M3 10V8a5 5 0 0 1 10 0v2"/><rect x="2" y="9.5" width="2.8" height="4" rx="1.2"/><rect x="11.2" y="9.5" width="2.8" height="4" rx="1.2"/>',
   mic:        '<rect x="6" y="2" width="4" height="7" rx="2"/><path d="M4 8a4 4 0 0 0 8 0M8 12v2"/>',
   voices:     '<circle cx="8" cy="5.5" r="2.5"/><path d="M3.5 13.5a4.5 4.5 0 0 1 9 0"/>',
+  // A speech bubble holding three level bars: text going in, audio coming out.
+  speech:     '<path d="M2.5 4.2A1.7 1.7 0 0 1 4.2 2.5h7.6a1.7 1.7 0 0 1 1.7 1.7v5.1a1.7 1.7 0 0 1-1.7 1.7H7.4L4.4 13.5v-2.5h-.2A1.7 1.7 0 0 1 2.5 9.3z"/><path d="M5.7 5.9v2.1M8 5.2v3.5M10.3 6.4v1.1"/>',
 
   // status
   alert: '<path d="M8 2.8 14.2 13.2H1.8z"/><path d="M8 6.6v3M8 11.4h0"/>',

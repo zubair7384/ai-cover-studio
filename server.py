@@ -437,6 +437,64 @@ def remix(payload: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Text to speech
+# ---------------------------------------------------------------------------
+@app.get("/api/speech/voices")
+def speech_voices() -> dict:
+    """
+    The base voices the OS synthesiser offers, plus the input limits, so the
+    view can render its controls without hardcoding anything the engine owns.
+    """
+    return {
+        "available": engine.speech_available(),
+        "voices": engine.list_speech_voices(),
+        "rateDefault": engine.SPEECH_RATE_DEFAULT,
+        "rateMin": engine.SPEECH_RATE_RANGE[0],
+        "rateMax": engine.SPEECH_RATE_RANGE[1],
+        "maxChars": engine.SPEECH_MAX_CHARS,
+    }
+
+
+@app.post("/api/speech")
+def speak(payload: dict) -> dict:
+    """
+    Speak text in a trained voice. A job like /api/convert, though a much
+    shorter one: nothing to separate and nothing to mix.
+    """
+    model_name = str(payload.get("model_name", ""))
+    text = str(payload.get("text", ""))
+
+    if not engine.speech_available():
+        raise HTTPException(
+            status_code=501,
+            detail="Speech needs macOS's built-in synthesiser, which isn't available here.")
+    if not model_name:
+        raise HTTPException(status_code=400, detail="Choose a voice first.")
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="Type something for the voice to say.")
+    if len(text) > engine.SPEECH_MAX_CHARS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"That's over the {engine.SPEECH_MAX_CHARS:,}-character limit for one "
+                   "clip — split it into a few.")
+
+    speed = float(payload.get("speed", 1.0) or 1.0)
+    if not 0.25 <= speed <= 4.0:
+        raise HTTPException(status_code=400, detail="That speed is out of range.")
+
+    job = Job()
+    JOBS[job.id] = job
+    _start(job, engine.generate_speech, model_name, text,
+           str(payload.get("speech_voice", "") or ""),
+           int(payload.get("pitch_shift", 0) or 0),
+           float(payload.get("index_rate", 0.75) or 0.75),
+           int(payload.get("rate", engine.SPEECH_RATE_DEFAULT) or engine.SPEECH_RATE_DEFAULT),
+           output_format=str(payload.get("output_format", "mp3") or "mp3"),
+           speed=speed)
+    return {"job_id": job.id}
+
+
+# ---------------------------------------------------------------------------
 # Fetch a song from a link
 # ---------------------------------------------------------------------------
 @app.post("/api/fetch-url")

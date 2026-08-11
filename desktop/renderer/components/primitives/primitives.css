@@ -134,6 +134,20 @@
 .input:disabled { opacity: 0.5; }
 .input--invalid { border-color: var(--err-500); }
 
+/* Multi-line variant — height is managed by Textarea's autogrow, so no fixed
+   height here, and the padding switches to symmetric. */
+.input--multiline {
+  height: auto;
+  min-height: var(--ctl-md);
+  padding: var(--sp-2);
+  line-height: var(--t-body-lh);
+  resize: none;
+  font-family: inherit;
+  display: block;
+}
+.field__counter { align-self: flex-end; color: var(--text-tertiary); }
+.field__counter[data-over="true"] { color: var(--err-text); }
+
 /* Search variant — magnifier inline */
 .search {
   position: relative;

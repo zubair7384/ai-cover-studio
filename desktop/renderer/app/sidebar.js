@@ -17,7 +17,8 @@ import { preference as themePreference, cycleTheme } from "./theme.js";
 /** Library rows — the two places (§8). */
 const PLACES = [
   { id: "covers", label: "Covers", icon: "waveform", shortcut: "⌘1" },
-  { id: "voices", label: "Voices", icon: "voices", shortcut: "⌘2" },
+  { id: "spoken", label: "Spoken", icon: "speech", shortcut: "⌘2" },
+  { id: "voices", label: "Voices", icon: "voices", shortcut: "⌘3" },
 ];
 
 /**
@@ -31,6 +32,7 @@ const PLACES = [
  */
 const FLOW_ROWS = [
   { id: "new-cover", label: "New cover", icon: "plus", shortcut: "⌘N" },
+  { id: "speak", label: "Speak", icon: "speech", shortcut: "⌘⇧S" },
   { id: "train", label: "Train a voice", icon: "mic", shortcut: "⌘⇧T" },
 ];
 
@@ -59,7 +61,8 @@ function activityRow(job) {
     type: "button",
     class: "nav-row",
     dataset: { job: job.id },
-    onclick: () => navigate(job.kind === "train" ? "train" : "new-cover", { flow: true }),
+    onclick: () => navigate({ train: "train", speech: "speak" }[job.kind] || "new-cover",
+                            { flow: true }),
   },
     el("span", { class: "nav-row__ring" }, ring),
     el("span", { class: "nav-row__label" }, job.name),

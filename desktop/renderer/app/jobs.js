@@ -15,20 +15,45 @@ import { getState, set } from "./store.js";
 import { api, origin, loadCovers, loadVoices } from "./api.js";
 
 export const COVER_STAGE_IDS = ["separate", "convert", "mix"];
+export const SPEECH_STAGE_IDS = ["speak", "convert", "export"];
 
 /**
  * The engine reports free-text steps ("Step 2/4 — cloning vocals with RVC").
- * Map them onto the three stages the Pipeline shows, so the UI never has to
- * parse prose at render time.
+ * Each pipeline maps them onto the stages its Pipeline meter shows, so the UI
+ * never has to parse prose at render time.
+ *
+ * Keyed by job.kind, which is why a speech job can share watch() with a cover
+ * one instead of duplicating the whole SSE reader.
  */
-function stageFromStep(step = "") {
-  const text = step.toLowerCase();
-  if (text.includes("separat")) return "separate";
-  if (text.includes("clon") || text.includes("convert")) return "convert";
-  if (text.includes("mix") || text.includes("export")) return "mix";
-  if (text.includes("polish")) return "convert";
-  return null;
-}
+const PIPELINES = {
+  cover: {
+    stageIds: COVER_STAGE_IDS,
+    stageFromStep(text) {
+      if (text.includes("separat")) return "separate";
+      if (text.includes("clon") || text.includes("convert")) return "convert";
+      if (text.includes("mix") || text.includes("export")) return "mix";
+      if (text.includes("polish")) return "convert";
+      return null;
+    },
+    doneTitle: "Cover generated",
+    failTitle: "Cover failed",
+  },
+  speech: {
+    stageIds: SPEECH_STAGE_IDS,
+    // "speak" is tested before "convert" because step 2's wording ("converting
+    // to your voice") would otherwise swallow step 1 ("speaking the text").
+    stageFromStep(text) {
+      if (text.includes("speak")) return "speak";
+      if (text.includes("convert") || text.includes("clon")) return "convert";
+      if (text.includes("export")) return "export";
+      return null;
+    },
+    doneTitle: "Clip ready",
+    failTitle: "Speech failed",
+  },
+};
+
+const pipelineFor = (kind) => PIPELINES[kind] || PIPELINES.cover;
 
 const patch = (id, changes) => {
   const jobs = getState().jobs.map((j) => (j.id === id ? { ...j, ...changes } : j));
@@ -102,6 +127,59 @@ export async function startCover({ songPath, songName, voiceId, params, trim }) 
   return job_id;
 }
 
+/**
+ * Start a speech run. Same job machinery as a cover, but seconds rather than
+ * minutes, so the view can afford to stay on screen and wait.
+ * @returns {Promise<string>} the job id
+ */
+export async function startSpeech({ text, voiceId, params }) {
+  const { job_id } = await fetch(`${origin()}/api/speech`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model_name: voiceId,
+      text,
+      speech_voice: params.speechVoice || "",
+      pitch_shift: params.pitchShift ?? 0,
+      index_rate: params.voiceCharacter ?? 0.75,
+      rate: params.rate ?? 175,
+      output_format: params.outputFormat || "mp3",
+      speed: params.speed ?? 1,
+    }),
+  }).then(async (res) => {
+    if (!res.ok) {
+      const detail = await res.json().catch(() => null);
+      throw new Error(detail?.detail || "The local engine refused the job.");
+    }
+    return res.json();
+  });
+
+  const job = {
+    id: job_id,
+    kind: "speech",
+    // The Activity row and the notification both read this, so it is the script
+    // rather than a generic label.
+    name: text.trim().split(/\s+/).slice(0, 6).join(" ") || "Spoken clip",
+    voiceId,
+    status: "running",
+    progress: 0,
+    stage: null,
+    stages: {},
+    startedAt: now(),
+    elapsedSec: 0,
+    etaSec: null,
+    note: "",
+    error: null,
+    errorDetail: null,
+    result: null,
+  };
+  set({ jobs: [...getState().jobs, job] });
+  syncSideEffects();
+
+  watch(job_id);
+  return job_id;
+}
+
 /** Attach to a job's SSE stream and keep the store in step. */
 function watch(id) {
   const source = api.jobEvents(id);
@@ -127,14 +205,16 @@ function watch(id) {
     const job = getState().jobs.find((j) => j.id === id);
     if (!job) return;
 
+    const cfg = pipelineFor(job.kind);
+
     if (msg.type === "progress") {
-      const stageId = stageFromStep(msg.step);
+      const stageId = cfg.stageFromStep((msg.step || "").toLowerCase());
       const stages = { ...job.stages };
       const elapsed = now() - job.startedAt;
 
       if (stageId) {
         // Close out any earlier stage the moment a later one starts.
-        for (const prior of COVER_STAGE_IDS) {
+        for (const prior of cfg.stageIds) {
           if (prior === stageId) break;
           if (stages[prior]?.state === "running") {
             stages[prior] = {
@@ -168,7 +248,7 @@ function watch(id) {
     if (msg.type === "done") {
       const elapsed = now() - job.startedAt;
       const stages = { ...job.stages };
-      for (const sid of COVER_STAGE_IDS) {
+      for (const sid of cfg.stageIds) {
         if (stages[sid] && stages[sid].state !== "done") {
           stages[sid] = { ...stages[sid], state: "done",
             durationSec: elapsed - (stages[sid].startedAt ?? 0) };
@@ -179,7 +259,7 @@ function watch(id) {
 
       loadCovers();
       window.vocalis.notify({
-        title: "Cover generated",
+        title: cfg.doneTitle,
         body: job.name,
       });
       return;
@@ -199,7 +279,7 @@ function watch(id) {
         error: msg.message || "The run failed.",
         errorDetail: msg.detail || null,
       });
-      window.vocalis.notify({ title: "Cover failed", body: job.name });
+      window.vocalis.notify({ title: cfg.failTitle, body: job.name });
     }
   };
 
@@ -228,6 +308,8 @@ export function dismissJob(id) {
 export const getJob = (id) => getState().jobs.find((j) => j.id === id) || null;
 export const latestCoverJob = () =>
   [...getState().jobs].reverse().find((j) => j.kind === "cover") || null;
+export const latestSpeechJob = () =>
+  [...getState().jobs].reverse().find((j) => j.kind === "speech") || null;
 
 
 /* ---- Training ----------------------------------------------------------- */

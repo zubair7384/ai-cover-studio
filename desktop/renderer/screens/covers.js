@@ -31,6 +31,38 @@ const SORTS = [
   { value: "voice", label: "Voice" },
 ];
 
+/**
+ * Covers and spoken clips are two places over one list.
+ *
+ * They share the manifest, the row, the player, export, rename, delete and
+ * drag-out — so sharing the view is the honest expression of that. What differs
+ * is only naming and the primary action, which is what this table holds.
+ */
+const KINDS = {
+  cover: {
+    kind: "cover",
+    title: "Covers",
+    noun: "cover",
+    icon: "waveform",
+    emptyTitle: "No covers yet",
+    emptyBody: "Pick a song and a voice, and Vocalis does the rest.",
+    actionLabel: "New cover",
+    actionIcon: "plus",
+    flow: "new-cover",
+  },
+  speech: {
+    kind: "speech",
+    title: "Spoken",
+    noun: "clip",
+    icon: "speech",
+    emptyTitle: "No spoken clips yet",
+    emptyBody: "Type a script, pick a voice, and Vocalis reads it in your own.",
+    actionLabel: "Speak",
+    actionIcon: "speech",
+    flow: "speak",
+  },
+};
+
 function toItem(rec) {
   return {
     id: rec.id,
@@ -48,6 +80,9 @@ function toItem(rec) {
     outputPath: rec.outputPath,
     missing: Boolean(rec.missing),
     src: mediaUrl(rec.id),
+    // Older records predate the field, and everything before Speak was a cover.
+    kind: rec.kind || "cover",
+    text: rec.text || null,
   };
 }
 
@@ -200,6 +235,8 @@ function Row(item, { selected, index, onSelect, selectionItems }) {
   const caption = el("div", { class: "row__meta t-caption" }, "");
   const paintCaption = (dur) => {
     caption.textContent = [
+      // No kind label here any more: each kind has its own page, so the view
+      // title already says it and repeating it in every row is noise.
       item.voice || "Unknown voice",
       dur ? fmt.duration(dur) : null,
       fmt.bytes(item.size),
@@ -282,10 +319,11 @@ function Row(item, { selected, index, onSelect, selectionItems }) {
 
 /* ---- view --------------------------------------------------------------- */
 
-export function CoversView() {
+/** The library list, for one kind of output. */
+function LibraryView(config) {
   const list = el("div", {
     class: "list", role: "listbox",
-    "aria-multiselectable": "true", "aria-label": "Covers",
+    "aria-multiselectable": "true", "aria-label": config.title,
   });
   const root = el("div", { class: "column" }, list);
 
@@ -337,6 +375,7 @@ export function CoversView() {
   });
   sortSelect.style.width = "128px";
 
+
   function toolbarConfig() {
     const chosen = selectedItems();
     if (chosen.length > 1) {
@@ -355,11 +394,11 @@ export function CoversView() {
       };
     }
     return {
-      title: "Covers",
+      title: config.title,
       actions: [
         sortSelect,
-        Button({ label: "New cover", variant: "primary", icon: "plus",
-          onClick: () => navigate("new-cover") }),
+        Button({ label: config.actionLabel, variant: "primary", icon: config.actionIcon,
+          onClick: () => navigate(config.flow) }),
       ],
     };
   }
@@ -367,7 +406,11 @@ export function CoversView() {
   /* ---- paint ----------------------------------------------------------- */
 
   function paint() {
-    const { covers, loading, error, query, selection } = getState();
+    const { covers: all, loading, error, query, selection } = getState();
+    // One manifest holds both kinds; this view only ever shows its own. Records
+    // written before Speak existed carry no kind and are all covers.
+    const covers = all.filter((c) => (c.kind || "cover") === config.kind);
+
     rows.forEach((r) => r.destroy?.());
     rows = [];
     list.innerHTML = "";
@@ -378,7 +421,7 @@ export function CoversView() {
     }
     if (error.covers) {
       list.appendChild(ErrorPanel({
-        title: "Couldn't read your covers",
+        title: "Couldn't read your library",
         body: error.covers,
         actionLabel: "Try again",
         onAction: loadCovers,
@@ -386,8 +429,11 @@ export function CoversView() {
       return;
     }
 
-    // First launch: nothing made, nothing trained. A panel, not a modal.
-    if (!covers.length && !getState().voices.length && !getState().loading.voices) {
+    // First launch: nothing made, nothing trained. A panel, not a modal. Only
+    // on Covers — it offers to train and to make a first cover, neither of
+    // which belongs on the Spoken page.
+    if (config.kind === "cover" && !all.length
+        && !getState().voices.length && !getState().loading.voices) {
       list.appendChild(FirstRun({
         onTrain: () => navigate("train"),
         onImport: async () => {
@@ -402,17 +448,18 @@ export function CoversView() {
 
     const hidden = new Set(getState().pendingDelete);
     visible = sortItems(
-      covers.map(toItem).filter((i) => !hidden.has(i.id) && matches(i, query)), sortMode);
+      covers.map(toItem)
+        .filter((i) => !hidden.has(i.id) && matches(i, query)), sortMode);
 
     if (!visible.length) {
       list.appendChild(covers.length
         ? EmptyState({ icon: "search", title: "No matches", body: `Nothing matches “${query}”.` })
         : EmptyState({
-            icon: "waveform",
-            title: "No covers yet",
-            body: "Pick a song and a voice, and Vocalis does the rest.",
-            action: Button({ label: "New cover", variant: "primary",
-              onClick: () => navigate("new-cover") }),
+            icon: config.icon,
+            title: config.emptyTitle,
+            body: config.emptyBody,
+            action: Button({ label: config.actionLabel, variant: "primary",
+              onClick: () => navigate(config.flow) }),
           }));
       root.setToolbar?.(toolbarConfig());
       return;
@@ -443,8 +490,8 @@ export function CoversView() {
     const chosen = selection.length;
     list.appendChild(el("div", { class: "list__footer t-caption" },
       chosen > 1
-        ? `${fmt.plural(chosen, "cover")} selected of ${visible.length}`
-        : `${fmt.plural(visible.length, "cover")} · stored on this Mac`));
+        ? `${fmt.plural(chosen, config.noun)} selected of ${visible.length}`
+        : `${fmt.plural(visible.length, config.noun)} · stored on this Mac`));
 
     root.setToolbar?.(toolbarConfig());
   }
@@ -498,3 +545,6 @@ export function CoversView() {
   };
   return root;
 }
+
+export const CoversView = () => LibraryView(KINDS.cover);
+export const SpokenView = () => LibraryView(KINDS.speech);

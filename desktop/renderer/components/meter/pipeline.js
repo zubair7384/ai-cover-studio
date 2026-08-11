@@ -122,3 +122,11 @@ export const COVER_STAGES = [
   { id: "convert", label: "Converting" },
   { id: "mix", label: "Mixing" },
 ];
+
+// Speech has no stems to separate and no instrumental to mix against, so it is
+// three shorter stages rather than the cover pipeline's four.
+export const SPEECH_STAGES = [
+  { id: "speak", label: "Speaking" },
+  { id: "convert", label: "Converting" },
+  { id: "export", label: "Exporting" },
+];

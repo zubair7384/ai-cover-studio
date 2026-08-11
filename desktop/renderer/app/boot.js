@@ -69,9 +69,11 @@ window.addEventListener("keydown", (e) => {
 window.vocalis.onCommand?.((command) => {
   switch (command) {
     case "covers":        navigate("covers"); break;
+    case "spoken":        navigate("spoken"); break;
     case "voices":        navigate("voices"); break;
     case "settings":      navigate("settings"); break;
     case "new-cover":     navigate("new-cover"); break;
+    case "speak":         navigate("speak"); break;
     case "train":         navigate("train"); break;
     case "toggle-sidebar": shell.toggleSidebar(); break;
     case "toggle-inspector":

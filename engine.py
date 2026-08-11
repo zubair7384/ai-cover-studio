@@ -30,6 +30,7 @@ import sys
 import tempfile
 import time
 import traceback
+import wave
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -884,6 +885,404 @@ class _CallbackLogHandler(logging.Handler):
                 self.log_cb(record.getMessage())
         except Exception:
             pass
+
+
+# ---------------------------------------------------------------------------
+# Text to speech
+# ---------------------------------------------------------------------------
+# An RVC model converts one voice into another; it cannot read text. So speech
+# is a two-stage chain: a base synthesiser says the words, then the same
+# convert_vocals() used by the cover pipeline recolours the result.
+#
+# The synthesiser is the OS one (`say` on macOS). That choice is deliberate:
+# every Python TTS package either phones home (edge-tts streams the text to
+# Microsoft) or needs a model download, and "your audio never leaves your
+# machine" is the product's core claim. `say` is offline, already installed and
+# has no weights to fetch. The base voice's own character barely matters here
+# because the RVC model overwrites the timbre anyway.
+SPEECH_MAX_CHARS = 5000
+
+# Rate is words per minute. `say` defaults to about 175.
+SPEECH_RATE_DEFAULT = 175
+SPEECH_RATE_RANGE = (100, 300)
+
+# macOS ships joke voices alongside the usable ones. They are kept in the list
+# (they are the user's voices, not ours to hide) but flagged, because robotic
+# and singing voices convert into unintelligible noise and nobody would guess
+# that from the name alone.
+_NOVELTY_VOICES = {
+    "Albert", "Bad News", "Bahh", "Bells", "Boing", "Bubbles", "Cellos",
+    "Deranged", "Fred", "Good News", "Hysterical", "Jester", "Junior", "Kathy",
+    "Organ", "Princess", "Ralph", "Superstar", "Trinoids", "Whisper", "Wobble",
+    "Zarvox",
+}
+
+# Anchored on the trailing "# sample" rather than on run-of-spaces: names that
+# carry a bracketed locale ("Eddy (English (UK))") sit one space from the code,
+# while plain names are padded out to a column.
+_SAY_VOICE_RE = re.compile(
+    # The region is normally two letters but can be a UN M49 number ("ar_001").
+    r"^(?P<name>.+?)\s+(?P<locale>[a-z]{2,3}[_-](?:[A-Z]{2}|\d{3}))\s+#\s*(?P<sample>.*)$")
+
+
+def speech_available() -> bool:
+    """True when this platform has a synthesiser we can drive."""
+    return sys.platform == "darwin" and shutil.which("say") is not None
+
+
+def list_speech_voices() -> list[dict]:
+    """
+    The OS voices available as a base for speech, newest-macOS format:
+        Name<pad>locale<pad># sample sentence
+    Names can contain spaces and brackets ("Eddy (English (UK))"), so the
+    locale token is what the line is split on, not whitespace.
+    """
+    if not speech_available():
+        return []
+    try:
+        out = subprocess.run(["say", "-v", "?"], capture_output=True, text=True,
+                             timeout=15, check=True).stdout
+    except (subprocess.SubprocessError, OSError) as exc:
+        log.warning("Could not list speech voices: %s", exc)
+        return []
+
+    voices = []
+    for line in out.splitlines():
+        m = _SAY_VOICE_RE.match(line.rstrip())
+        if not m:
+            continue
+        name, locale, sample = m.group(1).strip(), m.group(2).strip(), m.group(3).strip()
+        voices.append({
+            "id": name,
+            "name": name,
+            "locale": locale.replace("_", "-"),
+            "language": locale.split("_")[0].split("-")[0],
+            "sample": sample,
+            "novelty": name in _NOVELTY_VOICES,
+        })
+    voices.sort(key=lambda v: (v["novelty"], v["locale"], v["name"]))
+    log.info("Found %d speech voices.", len(voices))
+    return voices
+
+
+def _resolve_speech_voice(voice: str) -> str:
+    """Only ever hand `say` a voice it reported, so the name can't be an argument."""
+    available = list_speech_voices()
+    if not available:
+        raise RuntimeError("This machine has no speech voices available.")
+    if not voice:
+        return available[0]["id"]
+    for v in available:
+        if v["id"].lower() == voice.strip().lower():
+            return v["id"]
+    raise ValueError(f"'{voice}' isn't one of this machine's speech voices.")
+
+
+# ---------------------------------------------------------------------------
+# Word timing
+# ---------------------------------------------------------------------------
+# `say` cannot report when it speaks each word: --interactive highlights in a
+# terminal, in real time, and is unusable alongside -o. So the text is
+# synthesised one line at a time and the pieces are joined. Each line's real
+# duration is then known exactly, which anchors the timeline every few words
+# and stops the drift a whole-text estimate would accumulate over a long script.
+#
+# Within a line, time is split across words by syllable weight. A line is short,
+# so the residual error stays well under the length of one word.
+
+SPEECH_SR = 22050
+
+_SENTENCE_RE = re.compile(r"[^.!?]+(?:[.!?]+|$)")
+_WORD_RE = re.compile(r"\S+")
+_VOWEL_RUN_RE = re.compile(r"[aeiouy]+")
+
+# A comma is a beat, a full stop is a longer one. Values are in "syllable units"
+# so they compose with the weights below.
+_PAUSE_WEIGHT = {",": 0.6, ";": 0.8, ":": 0.8, ".": 1.2, "!": 1.2, "?": 1.2, "—": 0.8}
+
+
+def _syllables(word: str) -> float:
+    """Rough syllable count. Only the ratio between words matters here."""
+    w = re.sub(r"[^a-z]", "", word.lower())
+    if not w:
+        return 1.0
+    count = len(_VOWEL_RUN_RE.findall(w))
+    if w.endswith("e") and count > 1:
+        count -= 1
+    return float(max(1, count))
+
+
+def _speech_lines(text: str) -> list[tuple[int, int]]:
+    """
+    (start, end) character spans to synthesise separately. Lines first, because
+    a line break is where a writer already expects a pause; long lines are split
+    again at sentence ends so no single piece drifts.
+    """
+    spans: list[tuple[int, int]] = []
+    pos = 0
+    for raw in text.split("\n"):
+        line_start, line_end = pos, pos + len(raw)
+        pos = line_end + 1                      # +1 for the newline itself
+        if not raw.strip():
+            continue
+        if len(raw) <= 160:
+            spans.append((line_start, line_end))
+            continue
+        for m in _SENTENCE_RE.finditer(raw):
+            if raw[m.start():m.end()].strip():
+                spans.append((line_start + m.start(), line_start + m.end()))
+    return spans
+
+
+def _speech_bounds(samples, threshold: float = 0.02) -> tuple[float, float]:
+    """
+    Where sound actually starts and stops inside one synthesised piece, in
+    seconds. `say` pads both ends with silence, and counting that as speech
+    would push every word in the line late.
+    """
+    import numpy as np
+
+    if not len(samples):
+        return 0.0, 0.0
+    win = max(1, SPEECH_SR // 100)              # 10 ms
+    trimmed = samples[: len(samples) - (len(samples) % win)]
+    if not len(trimmed):
+        return 0.0, len(samples) / SPEECH_SR
+    envelope = np.abs(trimmed.reshape(-1, win)).max(axis=1)
+    loud = np.flatnonzero(envelope > threshold)
+    if not len(loud):
+        return 0.0, len(samples) / SPEECH_SR
+    return loud[0] * win / SPEECH_SR, (loud[-1] + 1) * win / SPEECH_SR
+
+
+def _word_timings(text: str, span: tuple[int, int], t0: float, t1: float) -> list[dict]:
+    """Split one line's speaking time across its words, weighted by syllables."""
+    start, end = span
+    words = [(m.start() + start, m.end() + start, m.group())
+             for m in _WORD_RE.finditer(text[start:end])]
+    if not words:
+        return []
+
+    weights = []
+    for _, _, w in words:
+        weight = _syllables(w)
+        trailing = w[-1] if w else ""
+        weight += _PAUSE_WEIGHT.get(trailing, 0.0)
+        weights.append(weight)
+
+    total = sum(weights) or 1.0
+    span_sec = max(0.0, t1 - t0)
+    out, cursor = [], t0
+    for (cs, ce, _), weight in zip(words, weights):
+        length = span_sec * (weight / total)
+        out.append({"start": round(cursor, 4), "end": round(cursor + length, 4),
+                    "charStart": cs, "charEnd": ce})
+        cursor += length
+    return out
+
+
+def synthesize_speech(text: str, voice: str, rate: int, work_dir: Path) -> dict:
+    """
+    Speak `text` to a mono 22.05 kHz wav — the input RVC wants — and return
+    {"path", "duration", "timings"} where timings are per-word spans into the
+    original string.
+    """
+    import numpy as np
+
+    body = (text or "").strip()
+    if not body:
+        raise ValueError("Type something for the voice to say.")
+    if len(body) > SPEECH_MAX_CHARS:
+        raise ValueError(f"That's over the {SPEECH_MAX_CHARS:,}-character limit "
+                         "for one clip — split it into a few.")
+
+    resolved = _resolve_speech_voice(voice)
+    lo, hi = SPEECH_RATE_RANGE
+    wpm = max(lo, min(hi, int(rate or SPEECH_RATE_DEFAULT)))
+
+    spans = _speech_lines(body)
+    if not spans:
+        raise ValueError("Type something for the voice to say.")
+
+    log.info("Synthesising %d characters as '%s' at %d wpm, in %d piece(s) …",
+             len(body), resolved, wpm, len(spans))
+
+    pieces: list = []
+    timings: list[dict] = []
+    elapsed = 0.0
+
+    for index, span in enumerate(spans):
+        chunk = body[span[0]:span[1]]
+        # -f rather than an inline argument: the text can contain anything,
+        # including the flags `say` would otherwise try to parse.
+        script = work_dir / f"line_{index:04d}.txt"
+        script.write_text(chunk, encoding="utf-8")
+        piece_path = work_dir / f"line_{index:04d}.wav"
+
+        try:
+            subprocess.run(
+                ["say", "-v", resolved, "-r", str(wpm), "-f", str(script),
+                 "-o", str(piece_path), "--data-format=LEI16@22050"],
+                capture_output=True, text=True, timeout=600, check=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            detail = (exc.stderr or "").strip().splitlines()
+            raise RuntimeError(
+                f"The synthesiser failed: {detail[0] if detail else 'unknown error'}")
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("The synthesiser took too long — try a shorter piece of text.")
+
+        if not piece_path.exists() or piece_path.stat().st_size == 0:
+            raise RuntimeError("The synthesiser produced no audio.")
+
+        with wave.open(str(piece_path), "rb") as wav:
+            frames = wav.readframes(wav.getnframes())
+        samples = np.frombuffer(frames, dtype="<i2").astype(np.float32) / 32768.0
+
+        speech_start, speech_end = _speech_bounds(samples)
+        timings.extend(_word_timings(body, span,
+                                     elapsed + speech_start, elapsed + speech_end))
+
+        pieces.append(samples)
+        elapsed += len(samples) / SPEECH_SR
+
+    joined = np.concatenate(pieces) if pieces else np.zeros(0, dtype=np.float32)
+    out_path = work_dir / "spoken.wav"
+    with wave.open(str(out_path), "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(SPEECH_SR)
+        wav.writeframes((np.clip(joined, -1.0, 1.0) * 32767).astype("<i2").tobytes())
+
+    # `body` goes back with the timings because the character offsets index IT,
+    # not the caller's string — leading whitespace would shift every span.
+    return {"path": out_path, "duration": elapsed, "timings": timings, "body": body}
+
+
+def export_speech(source: Path, output_format: str = "mp3", speed: float = 1.0) -> Path:
+    """
+    Encode a finished spoken clip. Deliberately not mix_and_export(): there is
+    no instrumental to overlay and no gain to balance, so reusing that would
+    mean inventing a silent second track.
+    """
+    from pydub import AudioSegment
+
+    spec = OUTPUT_FORMATS.get(str(output_format).lower(), OUTPUT_FORMATS["mp3"])
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+    out_path = OUTPUT_DIR / f"speech_{stamp}.{spec['ext']}"
+
+    audio_path = source
+    if abs(float(speed) - 1.0) >= 1e-3:
+        audio_path = change_speed(Path(source), float(speed), OUTPUT_DIR)
+
+    AudioSegment.from_file(audio_path).export(
+        out_path, format=spec["format"], **spec["params"])
+    if audio_path != source:
+        Path(audio_path).unlink(missing_ok=True)
+
+    log.info("Saved spoken clip -> %s", out_path)
+    return out_path
+
+
+def speech_title(text: str) -> str:
+    """First few words of the script, so the library row reads like the clip."""
+    words = re.sub(r"\s+", " ", (text or "").strip()).split(" ")
+    if not words or not words[0]:
+        return ""
+    title = " ".join(words[:8])
+    return title[:80].rstrip(" ,.;:") + ("…" if len(words) > 8 else "")
+
+
+def generate_speech(
+    model_name: str,
+    text: str,
+    voice: str = "",
+    pitch_shift: int = 0,
+    index_rate: float = 0.75,
+    rate: int = SPEECH_RATE_DEFAULT,
+    progress_cb: ProgressCb = None,
+    log_cb: LogCb = None,
+    output_format: str = "mp3",
+    speed: float = 1.0,
+) -> dict:
+    """
+    Speak `text` in a trained voice. Three steps rather than the cover
+    pipeline's four: there is nothing to separate and nothing to mix, which is
+    why this finishes in seconds where a cover takes minutes.
+
+    Returns {"path", "text", "timings"} — the word timings travel with the
+    result so the view can highlight along as it plays.
+    """
+    progress = progress_cb or _noop_progress
+    emit = log_cb or _noop_log
+
+    if not model_name:
+        raise ValueError("Select a voice first.")
+    if not speech_available():
+        raise RuntimeError("Speech needs macOS's built-in synthesiser, which "
+                           "isn't available on this machine.")
+
+    handler = _CallbackLogHandler(emit)
+    logging.getLogger().addHandler(handler)
+    work_dir = Path(tempfile.mkdtemp(prefix="speech_", dir=OUTPUT_DIR))
+    log.info("=== New speech job: model=%s voice=%s chars=%d ===",
+             model_name, voice or "default", len((text or "").strip()))
+
+    try:
+        progress(0.05, "Step 1/3 — speaking the text", "")
+        spoken = synthesize_speech(text, voice, rate, work_dir)
+
+        progress(0.30, "Step 2/3 — converting to your voice (RVC)",
+                 "First run downloads the RMVPE pitch model (~180 MB).")
+        cloned = convert_vocals(spoken["path"], model_name, int(pitch_shift),
+                                float(index_rate), work_dir)
+
+        # No apply_vocal_effects() here on purpose: its reverb and slap delay
+        # exist to seat a vocal in a busy mix. On dry speech they just sound
+        # like a bad phone line.
+        progress(0.90, "Step 3/3 — exporting", "")
+        final_path = export_speech(cloned, output_format, float(speed))
+
+        # Timings were measured on the pre-conversion audio. RVC is very nearly
+        # length-preserving and the speed change is exact, but rather than trust
+        # either, rescale by the ratio the finished file actually came out at.
+        # One multiply absorbs both.
+        import covers_manifest
+
+        timings = spoken["timings"]
+        final_dur = covers_manifest.probe_duration(final_path)
+        if timings and final_dur and spoken["duration"] > 0:
+            scale = final_dur / spoken["duration"]
+            if abs(scale - 1.0) > 1e-4:
+                log.info("Rescaling word timings by %.4f", scale)
+                timings = [{**t, "start": round(t["start"] * scale, 4),
+                            "end": round(t["end"] * scale, 4)} for t in timings]
+
+        try:
+            covers_manifest.record_generation(
+                final_path,
+                voice_id=model_name,
+                kind="speech",
+                title=speech_title(text) or None,
+                text=spoken["body"],
+                speech_voice=_resolve_speech_voice(voice),
+                speech_rate=int(rate),
+                pitch_shift=int(pitch_shift),
+                voice_character=float(index_rate),
+                speed=float(speed),
+                timings=timings,
+            )
+        except Exception:
+            log.error("Failed to record speech metadata:\n%s", traceback.format_exc())
+
+        progress(1.0, "Done!", "")
+        return {"path": str(final_path), "text": spoken["body"], "timings": timings}
+    except Exception:
+        log.error("Speech pipeline failure:\n%s", traceback.format_exc())
+        raise
+    finally:
+        logging.getLogger().removeHandler(handler)
+        shutil.rmtree(work_dir, ignore_errors=True)
 
 
 # ---------------------------------------------------------------------------

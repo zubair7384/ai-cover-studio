@@ -1,0 +1,78 @@
+/**
+ * ReadingView — §6. The Waveform's colour logic applied to text.
+ *
+ * unsaid   --text-tertiary   (graphite, like an unplayed waveform bar)
+ * saying   --accent          (the one live thing on the screen)
+ * said     --text-primary
+ */
+
+.reading {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: var(--sp-3);
+  background: var(--bg-control);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-control);
+  /* Nothing is playing yet, so the whole block starts a touch back. */
+  opacity: 0.92;
+  transition: opacity var(--dur-panel) var(--ease-exit);
+}
+.reading[data-playing="true"] { opacity: 1; }
+
+.reading__body {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  font-size: var(--t-body-size);
+  /* Looser than the 18px body default: this is read at a distance, following
+     a moving highlight, not scanned like a form label. */
+  line-height: 1.75;
+  color: var(--text-tertiary);
+  max-width: var(--measure);
+}
+
+.reading__body--seekable .reading__w { cursor: pointer; }
+
+.reading__w {
+  /* The word itself only ever transitions colour, and only over one press
+     duration — long enough to soften the step, short enough to stay in time. */
+  transition: color var(--dur-press) var(--ease-exit);
+  border-radius: 2px;
+}
+
+.reading__w--read { color: var(--text-primary); }
+
+/* The live word: amber up to --p, unsaid colour after it. The 1.5% ramp either
+   side of the stop softens the edge — word timings inside a line are estimates,
+   and a hard edge would claim more precision than they have. */
+.reading__w--live {
+  background-image: linear-gradient(
+    90deg,
+    var(--accent) 0%,
+    var(--accent) calc(var(--p, 0%) - 1.5%),
+    var(--text-tertiary) calc(var(--p, 0%) + 1.5%),
+    var(--text-tertiary) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  /* The fill is repositioned every frame, so transitioning it would lag. */
+  transition: none;
+}
+
+/* Focus ring for keyboard users landing on a seekable word. */
+.reading__w:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* A script with no timings still renders, just inert. */
+.reading[data-static="true"] .reading__body { color: var(--text-secondary); }
+
+@media (prefers-reduced-motion: reduce) {
+  .reading, .reading__w { transition-duration: 1ms; }
+  /* No sweep: the live word is simply amber, whole. */
+  .reading__w--live {
+    background-image: none;
+    color: var(--accent-text);
+  }
+}
