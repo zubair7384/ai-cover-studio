@@ -847,62 +847,6 @@
       "vocalGainDb": 0.0,
       "speed": 1.0
     },
-    "final_cover_20260810_011927.mp3": {
-      "id": "final_cover_20260810_011927.mp3",
-      "title": "Sharray Dasin Shahid Akhtar Qalandar Pk7Lx1Abmha",
-      "sourceFileName": "Sharray_Dasin_Shahid_Akhtar_Qalandar-Pk7lX1AbmhA.wav",
-      "sourcePath": "/Users/test/Developer/ai-cover-studio/downloads/Sharray_Dasin_Shahid_Akhtar_Qalandar-Pk7lX1AbmhA.wav",
-      "outputPath": "/Users/test/Developer/ai-cover-studio/outputs/final_cover_20260810_011927.mp3",
-      "voiceId": "arijit",
-      "voiceName": "arijit",
-      "createdAt": 1786306767.0,
-      "durationSec": 44.39,
-      "sizeBytes": 1778459,
-      "pitchShift": 0,
-      "voiceCharacter": 0.75,
-      "sampleRate": null,
-      "outputFormat": "mp3",
-      "origin": "generated",
-      "missing": false,
-      "stems": {
-        "vocals": "/Users/test/Developer/ai-cover-studio/outputs/cover_dt79wn6i/vocals.wav",
-        "instrumental": "/Users/test/Developer/ai-cover-studio/outputs/cover_dt79wn6i/instrumental.wav",
-        "vocalsFx": "/Users/test/Developer/ai-cover-studio/outputs/cover_dt79wn6i/cloned_vocals_fx.wav"
-      },
-      "stemSignature": "/Users/test/Developer/ai-cover-studio/downloads/Sharray_Dasin_Shahid_Akhtar_Qalandar-Pk7lX1AbmhA.wav|66071066|1786306685|19.709|53.009",
-      "trimStart": 19.70898037227849,
-      "trimEnd": 53.009236334612844,
-      "vocalGainDb": 5.5,
-      "speed": 0.75
-    },
-    "final_cover_20260810_012016.mp3": {
-      "id": "final_cover_20260810_012016.mp3",
-      "title": "Sharray Dasin Shahid Akhtar Qalandar Pk7Lx1Abmha",
-      "sourceFileName": "Sharray_Dasin_Shahid_Akhtar_Qalandar-Pk7lX1AbmhA.wav",
-      "sourcePath": "/Users/test/Developer/ai-cover-studio/downloads/Sharray_Dasin_Shahid_Akhtar_Qalandar-Pk7lX1AbmhA.wav",
-      "outputPath": "/Users/test/Developer/ai-cover-studio/outputs/final_cover_20260810_012016.mp3",
-      "voiceId": "arijit",
-      "voiceName": "arijit",
-      "createdAt": 1786306816.0,
-      "durationSec": 44.388,
-      "sizeBytes": 1778459,
-      "pitchShift": 0,
-      "voiceCharacter": 0.75,
-      "sampleRate": null,
-      "outputFormat": "mp3",
-      "origin": "generated",
-      "missing": false,
-      "stems": {
-        "vocals": "/Users/test/Developer/ai-cover-studio/outputs/cover_dt79wn6i/vocals.wav",
-        "instrumental": "/Users/test/Developer/ai-cover-studio/outputs/cover_dt79wn6i/instrumental.wav",
-        "vocalsFx": "/Users/test/Developer/ai-cover-studio/outputs/cover_dt79wn6i/cloned_vocals_fx.wav"
-      },
-      "stemSignature": "/Users/test/Developer/ai-cover-studio/downloads/Sharray_Dasin_Shahid_Akhtar_Qalandar-Pk7lX1AbmhA.wav|66071066|1786306685|19.709|53.009",
-      "trimStart": 19.70898037227849,
-      "trimEnd": 53.009236334612844,
-      "vocalGainDb": 4.5,
-      "speed": 0.75
-    },
     "speech_20260811_162324.mp3": {
       "id": "speech_20260811_162324.mp3",
       "title": "Hello, this is Vocalis speaking a test line\u2026",
@@ -2420,6 +2364,1356 @@
           "charEnd": 515
         }
       ]
+    },
+    "speech_20260811_192559.mp3": {
+      "id": "speech_20260811_192559.mp3",
+      "title": "But here's how you get to keep your\u2026",
+      "sourceFileName": null,
+      "sourcePath": null,
+      "outputPath": "/Users/test/Developer/ai-cover-studio/outputs/speech_20260811_192559.mp3",
+      "voiceId": "zub",
+      "voiceName": "zub",
+      "createdAt": 1786458359.0,
+      "durationSec": 75.5,
+      "sizeBytes": 3022932,
+      "pitchShift": 0,
+      "voiceCharacter": 0.75,
+      "sampleRate": null,
+      "outputFormat": "mp3",
+      "origin": "generated",
+      "missing": false,
+      "stems": null,
+      "stemSignature": null,
+      "trimStart": null,
+      "trimEnd": null,
+      "vocalGainDb": null,
+      "speed": 1.0,
+      "kind": "speech",
+      "text": "But here's how you get to keep your number. Sell lifetime at $57.77 as a launch offer, capped at the first 500 buyers or the first six months, then it goes to $147.77 permanently. Early believers get a genuine bargain, you get a cash injection exactly when you need it for marketing, urgency does real work in your launch copy, and you haven't capped your pricing forever. Say the cap out loud and then honour it.\n\nThree other things:\n\nDefine what lifetime means before you sell one. Lifetime of the product, not of the customer, and be explicit about whether major versions are included. If v4 is a paid upgrade, say so on the checkout page. Sketch nearly burned its community getting this wrong.\n\nYou've lost your ceiling. With $57.77 as the top price, a full-time creator monetising covers on YouTube is worth exactly the same to you as someone who tries it twice. Those are the people most able and willing to pay. Add a commercial tier at $17.77/month or $177.77/year carrying commercial-use terms, multi-machine activation and priority support. One extra tier, and it will likely be a meaningful slice of revenue.",
+      "speechVoice": "Daniel",
+      "speechRate": 175,
+      "timings": [
+        {
+          "start": 0.01,
+          "end": 0.176,
+          "charStart": 0,
+          "charEnd": 3
+        },
+        {
+          "start": 0.176,
+          "end": 0.5079,
+          "charStart": 4,
+          "charEnd": 10
+        },
+        {
+          "start": 0.5079,
+          "end": 0.6739,
+          "charStart": 11,
+          "charEnd": 14
+        },
+        {
+          "start": 0.6739,
+          "end": 0.84,
+          "charStart": 15,
+          "charEnd": 18
+        },
+        {
+          "start": 0.84,
+          "end": 1.006,
+          "charStart": 19,
+          "charEnd": 22
+        },
+        {
+          "start": 1.006,
+          "end": 1.1719,
+          "charStart": 23,
+          "charEnd": 25
+        },
+        {
+          "start": 1.1719,
+          "end": 1.3379,
+          "charStart": 26,
+          "charEnd": 30
+        },
+        {
+          "start": 1.3379,
+          "end": 1.5039,
+          "charStart": 31,
+          "charEnd": 35
+        },
+        {
+          "start": 1.5039,
+          "end": 2.0351,
+          "charStart": 36,
+          "charEnd": 43
+        },
+        {
+          "start": 2.0554,
+          "end": 2.3713,
+          "charStart": 44,
+          "charEnd": 48
+        },
+        {
+          "start": 2.3713,
+          "end": 3.3191,
+          "charStart": 49,
+          "charEnd": 57
+        },
+        {
+          "start": 3.3191,
+          "end": 3.6349,
+          "charStart": 58,
+          "charEnd": 60
+        },
+        {
+          "start": 3.6349,
+          "end": 4.3299,
+          "charStart": 61,
+          "charEnd": 65
+        },
+        {
+          "start": 4.3779,
+          "end": 4.7087,
+          "charStart": 65,
+          "charEnd": 67
+        },
+        {
+          "start": 4.7087,
+          "end": 5.0393,
+          "charStart": 68,
+          "charEnd": 70
+        },
+        {
+          "start": 5.0393,
+          "end": 5.3701,
+          "charStart": 71,
+          "charEnd": 72
+        },
+        {
+          "start": 5.3701,
+          "end": 5.7007,
+          "charStart": 73,
+          "charEnd": 79
+        },
+        {
+          "start": 5.7007,
+          "end": 6.5606,
+          "charStart": 80,
+          "charEnd": 86
+        },
+        {
+          "start": 6.5606,
+          "end": 7.222,
+          "charStart": 87,
+          "charEnd": 93
+        },
+        {
+          "start": 7.222,
+          "end": 7.5527,
+          "charStart": 94,
+          "charEnd": 96
+        },
+        {
+          "start": 7.5527,
+          "end": 7.8834,
+          "charStart": 97,
+          "charEnd": 100
+        },
+        {
+          "start": 7.8834,
+          "end": 8.2141,
+          "charStart": 101,
+          "charEnd": 106
+        },
+        {
+          "start": 8.2141,
+          "end": 8.5448,
+          "charStart": 107,
+          "charEnd": 110
+        },
+        {
+          "start": 8.5448,
+          "end": 8.8755,
+          "charStart": 111,
+          "charEnd": 117
+        },
+        {
+          "start": 8.8755,
+          "end": 9.2062,
+          "charStart": 118,
+          "charEnd": 120
+        },
+        {
+          "start": 9.2062,
+          "end": 9.5369,
+          "charStart": 121,
+          "charEnd": 124
+        },
+        {
+          "start": 9.5369,
+          "end": 9.8676,
+          "charStart": 125,
+          "charEnd": 130
+        },
+        {
+          "start": 9.8676,
+          "end": 10.1983,
+          "charStart": 131,
+          "charEnd": 134
+        },
+        {
+          "start": 10.1983,
+          "end": 10.7274,
+          "charStart": 135,
+          "charEnd": 142
+        },
+        {
+          "start": 10.7274,
+          "end": 11.0581,
+          "charStart": 143,
+          "charEnd": 147
+        },
+        {
+          "start": 11.0581,
+          "end": 11.3888,
+          "charStart": 148,
+          "charEnd": 150
+        },
+        {
+          "start": 11.3888,
+          "end": 11.7196,
+          "charStart": 151,
+          "charEnd": 155
+        },
+        {
+          "start": 11.7196,
+          "end": 12.0502,
+          "charStart": 156,
+          "charEnd": 158
+        },
+        {
+          "start": 12.0502,
+          "end": 12.7778,
+          "charStart": 159,
+          "charEnd": 164
+        },
+        {
+          "start": 12.8182,
+          "end": 13.095,
+          "charStart": 164,
+          "charEnd": 166
+        },
+        {
+          "start": 13.095,
+          "end": 14.5341,
+          "charStart": 167,
+          "charEnd": 179
+        },
+        {
+          "start": 14.562,
+          "end": 14.9617,
+          "charStart": 180,
+          "charEnd": 185
+        },
+        {
+          "start": 14.9617,
+          "end": 15.5613,
+          "charStart": 186,
+          "charEnd": 195
+        },
+        {
+          "start": 15.5613,
+          "end": 15.7612,
+          "charStart": 196,
+          "charEnd": 199
+        },
+        {
+          "start": 15.7612,
+          "end": 15.9611,
+          "charStart": 200,
+          "charEnd": 201
+        },
+        {
+          "start": 15.9611,
+          "end": 16.3608,
+          "charStart": 202,
+          "charEnd": 209
+        },
+        {
+          "start": 16.3608,
+          "end": 16.8806,
+          "charStart": 210,
+          "charEnd": 218
+        },
+        {
+          "start": 16.8806,
+          "end": 17.0804,
+          "charStart": 219,
+          "charEnd": 222
+        },
+        {
+          "start": 17.0804,
+          "end": 17.2803,
+          "charStart": 223,
+          "charEnd": 226
+        },
+        {
+          "start": 17.2803,
+          "end": 17.4802,
+          "charStart": 227,
+          "charEnd": 228
+        },
+        {
+          "start": 17.4802,
+          "end": 17.6801,
+          "charStart": 229,
+          "charEnd": 233
+        },
+        {
+          "start": 17.6801,
+          "end": 18.2798,
+          "charStart": 234,
+          "charEnd": 243
+        },
+        {
+          "start": 18.2798,
+          "end": 18.8794,
+          "charStart": 244,
+          "charEnd": 251
+        },
+        {
+          "start": 18.8794,
+          "end": 19.0793,
+          "charStart": 252,
+          "charEnd": 256
+        },
+        {
+          "start": 19.0793,
+          "end": 19.2792,
+          "charStart": 257,
+          "charEnd": 260
+        },
+        {
+          "start": 19.2792,
+          "end": 19.479,
+          "charStart": 261,
+          "charEnd": 265
+        },
+        {
+          "start": 19.479,
+          "end": 19.6789,
+          "charStart": 266,
+          "charEnd": 268
+        },
+        {
+          "start": 19.6789,
+          "end": 19.8788,
+          "charStart": 269,
+          "charEnd": 272
+        },
+        {
+          "start": 19.8788,
+          "end": 20.5984,
+          "charStart": 273,
+          "charEnd": 283
+        },
+        {
+          "start": 20.5984,
+          "end": 21.198,
+          "charStart": 284,
+          "charEnd": 291
+        },
+        {
+          "start": 21.198,
+          "end": 21.398,
+          "charStart": 292,
+          "charEnd": 296
+        },
+        {
+          "start": 21.398,
+          "end": 21.5978,
+          "charStart": 297,
+          "charEnd": 301
+        },
+        {
+          "start": 21.5978,
+          "end": 21.7977,
+          "charStart": 302,
+          "charEnd": 306
+        },
+        {
+          "start": 21.7977,
+          "end": 21.9976,
+          "charStart": 307,
+          "charEnd": 309
+        },
+        {
+          "start": 21.9976,
+          "end": 22.1975,
+          "charStart": 310,
+          "charEnd": 314
+        },
+        {
+          "start": 22.1975,
+          "end": 22.3973,
+          "charStart": 315,
+          "charEnd": 321
+        },
+        {
+          "start": 22.3973,
+          "end": 22.9171,
+          "charStart": 322,
+          "charEnd": 327
+        },
+        {
+          "start": 22.9171,
+          "end": 23.1169,
+          "charStart": 328,
+          "charEnd": 331
+        },
+        {
+          "start": 23.1169,
+          "end": 23.3168,
+          "charStart": 332,
+          "charEnd": 335
+        },
+        {
+          "start": 23.3168,
+          "end": 23.7166,
+          "charStart": 336,
+          "charEnd": 343
+        },
+        {
+          "start": 23.7166,
+          "end": 24.1163,
+          "charStart": 344,
+          "charEnd": 350
+        },
+        {
+          "start": 24.1163,
+          "end": 24.3162,
+          "charStart": 351,
+          "charEnd": 355
+        },
+        {
+          "start": 24.3162,
+          "end": 24.7159,
+          "charStart": 356,
+          "charEnd": 363
+        },
+        {
+          "start": 24.7159,
+          "end": 25.5555,
+          "charStart": 364,
+          "charEnd": 372
+        },
+        {
+          "start": 25.5912,
+          "end": 25.7659,
+          "charStart": 373,
+          "charEnd": 376
+        },
+        {
+          "start": 25.7659,
+          "end": 25.9405,
+          "charStart": 377,
+          "charEnd": 380
+        },
+        {
+          "start": 25.9405,
+          "end": 26.115,
+          "charStart": 381,
+          "charEnd": 384
+        },
+        {
+          "start": 26.115,
+          "end": 26.2896,
+          "charStart": 385,
+          "charEnd": 388
+        },
+        {
+          "start": 26.2896,
+          "end": 26.4642,
+          "charStart": 389,
+          "charEnd": 393
+        },
+        {
+          "start": 26.4642,
+          "end": 26.6388,
+          "charStart": 394,
+          "charEnd": 397
+        },
+        {
+          "start": 26.6388,
+          "end": 26.8134,
+          "charStart": 398,
+          "charEnd": 402
+        },
+        {
+          "start": 26.8134,
+          "end": 27.1625,
+          "charStart": 403,
+          "charEnd": 409
+        },
+        {
+          "start": 27.1625,
+          "end": 27.5466,
+          "charStart": 410,
+          "charEnd": 413
+        },
+        {
+          "start": 27.5982,
+          "end": 27.8184,
+          "charStart": 415,
+          "charEnd": 420
+        },
+        {
+          "start": 27.8184,
+          "end": 28.2591,
+          "charStart": 421,
+          "charEnd": 426
+        },
+        {
+          "start": 28.2591,
+          "end": 28.6556,
+          "charStart": 427,
+          "charEnd": 434
+        },
+        {
+          "start": 28.6755,
+          "end": 29.1018,
+          "charStart": 436,
+          "charEnd": 442
+        },
+        {
+          "start": 29.1018,
+          "end": 29.3148,
+          "charStart": 443,
+          "charEnd": 447
+        },
+        {
+          "start": 29.3148,
+          "end": 29.9542,
+          "charStart": 448,
+          "charEnd": 456
+        },
+        {
+          "start": 29.9542,
+          "end": 30.1673,
+          "charStart": 457,
+          "charEnd": 462
+        },
+        {
+          "start": 30.1673,
+          "end": 30.5936,
+          "charStart": 463,
+          "charEnd": 469
+        },
+        {
+          "start": 30.5936,
+          "end": 30.8067,
+          "charStart": 470,
+          "charEnd": 473
+        },
+        {
+          "start": 30.8067,
+          "end": 31.0198,
+          "charStart": 474,
+          "charEnd": 478
+        },
+        {
+          "start": 31.0198,
+          "end": 31.4887,
+          "charStart": 479,
+          "charEnd": 483
+        },
+        {
+          "start": 31.5321,
+          "end": 32.0772,
+          "charStart": 484,
+          "charEnd": 492
+        },
+        {
+          "start": 32.0772,
+          "end": 32.2588,
+          "charStart": 493,
+          "charEnd": 495
+        },
+        {
+          "start": 32.2588,
+          "end": 32.4405,
+          "charStart": 496,
+          "charEnd": 499
+        },
+        {
+          "start": 32.4405,
+          "end": 32.9128,
+          "charStart": 500,
+          "charEnd": 508
+        },
+        {
+          "start": 32.9128,
+          "end": 33.0944,
+          "charStart": 509,
+          "charEnd": 512
+        },
+        {
+          "start": 33.0944,
+          "end": 33.2761,
+          "charStart": 513,
+          "charEnd": 515
+        },
+        {
+          "start": 33.2761,
+          "end": 33.4578,
+          "charStart": 516,
+          "charEnd": 519
+        },
+        {
+          "start": 33.4578,
+          "end": 34.1118,
+          "charStart": 520,
+          "charEnd": 529
+        },
+        {
+          "start": 34.1118,
+          "end": 34.2935,
+          "charStart": 530,
+          "charEnd": 533
+        },
+        {
+          "start": 34.2935,
+          "end": 34.475,
+          "charStart": 534,
+          "charEnd": 536
+        },
+        {
+          "start": 34.475,
+          "end": 35.0201,
+          "charStart": 537,
+          "charEnd": 545
+        },
+        {
+          "start": 35.0201,
+          "end": 35.3834,
+          "charStart": 546,
+          "charEnd": 551
+        },
+        {
+          "start": 35.3834,
+          "end": 35.7467,
+          "charStart": 552,
+          "charEnd": 559
+        },
+        {
+          "start": 35.7467,
+          "end": 36.11,
+          "charStart": 560,
+          "charEnd": 565
+        },
+        {
+          "start": 36.11,
+          "end": 36.4734,
+          "charStart": 566,
+          "charEnd": 574
+        },
+        {
+          "start": 36.4734,
+          "end": 36.6551,
+          "charStart": 575,
+          "charEnd": 578
+        },
+        {
+          "start": 36.6551,
+          "end": 37.418,
+          "charStart": 579,
+          "charEnd": 588
+        },
+        {
+          "start": 37.4799,
+          "end": 37.7167,
+          "charStart": 589,
+          "charEnd": 591
+        },
+        {
+          "start": 37.7167,
+          "end": 37.9536,
+          "charStart": 592,
+          "charEnd": 594
+        },
+        {
+          "start": 37.9536,
+          "end": 38.1904,
+          "charStart": 595,
+          "charEnd": 597
+        },
+        {
+          "start": 38.1904,
+          "end": 38.4271,
+          "charStart": 598,
+          "charEnd": 599
+        },
+        {
+          "start": 38.4271,
+          "end": 38.6639,
+          "charStart": 600,
+          "charEnd": 604
+        },
+        {
+          "start": 38.6639,
+          "end": 39.2795,
+          "charStart": 605,
+          "charEnd": 613
+        },
+        {
+          "start": 39.2795,
+          "end": 39.5163,
+          "charStart": 614,
+          "charEnd": 617
+        },
+        {
+          "start": 39.5163,
+          "end": 39.753,
+          "charStart": 618,
+          "charEnd": 620
+        },
+        {
+          "start": 39.753,
+          "end": 39.9898,
+          "charStart": 621,
+          "charEnd": 623
+        },
+        {
+          "start": 39.9898,
+          "end": 40.2266,
+          "charStart": 624,
+          "charEnd": 627
+        },
+        {
+          "start": 40.2266,
+          "end": 40.7001,
+          "charStart": 628,
+          "charEnd": 636
+        },
+        {
+          "start": 40.7001,
+          "end": 41.221,
+          "charStart": 637,
+          "charEnd": 642
+        },
+        {
+          "start": 41.2658,
+          "end": 41.4569,
+          "charStart": 643,
+          "charEnd": 649
+        },
+        {
+          "start": 41.4569,
+          "end": 41.8389,
+          "charStart": 650,
+          "charEnd": 656
+        },
+        {
+          "start": 41.8389,
+          "end": 42.2208,
+          "charStart": 657,
+          "charEnd": 663
+        },
+        {
+          "start": 42.2208,
+          "end": 42.4118,
+          "charStart": 664,
+          "charEnd": 667
+        },
+        {
+          "start": 42.4118,
+          "end": 43.1758,
+          "charStart": 668,
+          "charEnd": 677
+        },
+        {
+          "start": 43.1758,
+          "end": 43.5577,
+          "charStart": 678,
+          "charEnd": 685
+        },
+        {
+          "start": 43.5577,
+          "end": 43.7487,
+          "charStart": 686,
+          "charEnd": 690
+        },
+        {
+          "start": 43.7487,
+          "end": 44.1689,
+          "charStart": 691,
+          "charEnd": 697
+        },
+        {
+          "start": 44.1937,
+          "end": 44.3932,
+          "charStart": 699,
+          "charEnd": 705
+        },
+        {
+          "start": 44.3932,
+          "end": 44.5927,
+          "charStart": 706,
+          "charEnd": 710
+        },
+        {
+          "start": 44.5927,
+          "end": 44.7923,
+          "charStart": 711,
+          "charEnd": 715
+        },
+        {
+          "start": 44.7923,
+          "end": 45.4307,
+          "charStart": 716,
+          "charEnd": 724
+        },
+        {
+          "start": 45.4615,
+          "end": 45.9291,
+          "charStart": 725,
+          "charEnd": 729
+        },
+        {
+          "start": 45.9291,
+          "end": 46.9579,
+          "charStart": 730,
+          "charEnd": 734
+        },
+        {
+          "start": 47.006,
+          "end": 47.2478,
+          "charStart": 734,
+          "charEnd": 736
+        },
+        {
+          "start": 47.2478,
+          "end": 47.4896,
+          "charStart": 737,
+          "charEnd": 739
+        },
+        {
+          "start": 47.4896,
+          "end": 47.7314,
+          "charStart": 740,
+          "charEnd": 743
+        },
+        {
+          "start": 47.7314,
+          "end": 47.9733,
+          "charStart": 744,
+          "charEnd": 747
+        },
+        {
+          "start": 47.9733,
+          "end": 48.3601,
+          "charStart": 748,
+          "charEnd": 754
+        },
+        {
+          "start": 48.3601,
+          "end": 48.602,
+          "charStart": 755,
+          "charEnd": 756
+        },
+        {
+          "start": 48.602,
+          "end": 49.0855,
+          "charStart": 757,
+          "charEnd": 766
+        },
+        {
+          "start": 49.0855,
+          "end": 49.5691,
+          "charStart": 767,
+          "charEnd": 774
+        },
+        {
+          "start": 49.5691,
+          "end": 50.5364,
+          "charStart": 775,
+          "charEnd": 785
+        },
+        {
+          "start": 50.5364,
+          "end": 51.0201,
+          "charStart": 786,
+          "charEnd": 792
+        },
+        {
+          "start": 51.0201,
+          "end": 51.2618,
+          "charStart": 793,
+          "charEnd": 795
+        },
+        {
+          "start": 51.2618,
+          "end": 51.7455,
+          "charStart": 796,
+          "charEnd": 803
+        },
+        {
+          "start": 51.7455,
+          "end": 51.9872,
+          "charStart": 804,
+          "charEnd": 806
+        },
+        {
+          "start": 51.9872,
+          "end": 52.2291,
+          "charStart": 807,
+          "charEnd": 812
+        },
+        {
+          "start": 52.2291,
+          "end": 52.9545,
+          "charStart": 813,
+          "charEnd": 820
+        },
+        {
+          "start": 52.9545,
+          "end": 53.1963,
+          "charStart": 821,
+          "charEnd": 824
+        },
+        {
+          "start": 53.1963,
+          "end": 53.4381,
+          "charStart": 825,
+          "charEnd": 829
+        },
+        {
+          "start": 53.4381,
+          "end": 53.6799,
+          "charStart": 830,
+          "charEnd": 832
+        },
+        {
+          "start": 53.6799,
+          "end": 53.9218,
+          "charStart": 833,
+          "charEnd": 836
+        },
+        {
+          "start": 53.9218,
+          "end": 54.1635,
+          "charStart": 837,
+          "charEnd": 839
+        },
+        {
+          "start": 54.1635,
+          "end": 54.6472,
+          "charStart": 840,
+          "charEnd": 847
+        },
+        {
+          "start": 54.6472,
+          "end": 54.8889,
+          "charStart": 848,
+          "charEnd": 851
+        },
+        {
+          "start": 54.8889,
+          "end": 55.1308,
+          "charStart": 852,
+          "charEnd": 857
+        },
+        {
+          "start": 55.1308,
+          "end": 55.3726,
+          "charStart": 858,
+          "charEnd": 860
+        },
+        {
+          "start": 55.3726,
+          "end": 55.9046,
+          "charStart": 861,
+          "charEnd": 867
+        },
+        {
+          "start": 55.957,
+          "end": 56.1581,
+          "charStart": 868,
+          "charEnd": 873
+        },
+        {
+          "start": 56.1581,
+          "end": 56.3593,
+          "charStart": 874,
+          "charEnd": 877
+        },
+        {
+          "start": 56.3593,
+          "end": 56.5604,
+          "charStart": 878,
+          "charEnd": 881
+        },
+        {
+          "start": 56.5604,
+          "end": 56.7616,
+          "charStart": 882,
+          "charEnd": 888
+        },
+        {
+          "start": 56.7616,
+          "end": 56.9628,
+          "charStart": 889,
+          "charEnd": 893
+        },
+        {
+          "start": 56.9628,
+          "end": 57.1638,
+          "charStart": 894,
+          "charEnd": 898
+        },
+        {
+          "start": 57.1638,
+          "end": 57.365,
+          "charStart": 899,
+          "charEnd": 902
+        },
+        {
+          "start": 57.365,
+          "end": 57.7674,
+          "charStart": 903,
+          "charEnd": 910
+        },
+        {
+          "start": 57.7674,
+          "end": 57.9685,
+          "charStart": 911,
+          "charEnd": 913
+        },
+        {
+          "start": 57.9685,
+          "end": 58.4111,
+          "charStart": 914,
+          "charEnd": 918
+        },
+        {
+          "start": 58.4401,
+          "end": 58.7002,
+          "charStart": 919,
+          "charEnd": 922
+        },
+        {
+          "start": 58.7002,
+          "end": 58.9605,
+          "charStart": 923,
+          "charEnd": 924
+        },
+        {
+          "start": 58.9605,
+          "end": 59.7412,
+          "charStart": 925,
+          "charEnd": 935
+        },
+        {
+          "start": 59.7412,
+          "end": 60.0015,
+          "charStart": 936,
+          "charEnd": 940
+        },
+        {
+          "start": 60.0015,
+          "end": 60.2617,
+          "charStart": 941,
+          "charEnd": 943
+        },
+        {
+          "start": 60.2617,
+          "end": 60.8343,
+          "charStart": 944,
+          "charEnd": 948
+        },
+        {
+          "start": 60.8794,
+          "end": 61.8033,
+          "charStart": 948,
+          "charEnd": 956
+        },
+        {
+          "start": 61.8033,
+          "end": 62.7273,
+          "charStart": 957,
+          "charEnd": 959
+        },
+        {
+          "start": 62.7273,
+          "end": 64.76,
+          "charStart": 960,
+          "charEnd": 965
+        },
+        {
+          "start": 64.8039,
+          "end": 65.086,
+          "charStart": 965,
+          "charEnd": 972
+        },
+        {
+          "start": 65.086,
+          "end": 65.6502,
+          "charStart": 973,
+          "charEnd": 981
+        },
+        {
+          "start": 65.6502,
+          "end": 66.7786,
+          "charStart": 982,
+          "charEnd": 996
+        },
+        {
+          "start": 66.7786,
+          "end": 67.2299,
+          "charStart": 997,
+          "charEnd": 1003
+        },
+        {
+          "start": 67.2299,
+          "end": 68.3583,
+          "charStart": 1004,
+          "charEnd": 1017
+        },
+        {
+          "start": 68.3583,
+          "end": 69.4867,
+          "charStart": 1018,
+          "charEnd": 1028
+        },
+        {
+          "start": 69.4867,
+          "end": 69.7688,
+          "charStart": 1029,
+          "charEnd": 1032
+        },
+        {
+          "start": 69.7688,
+          "end": 70.6151,
+          "charStart": 1033,
+          "charEnd": 1041
+        },
+        {
+          "start": 70.6151,
+          "end": 71.5177,
+          "charStart": 1042,
+          "charEnd": 1050
+        },
+        {
+          "start": 71.5393,
+          "end": 71.7282,
+          "charStart": 1051,
+          "charEnd": 1054
+        },
+        {
+          "start": 71.7282,
+          "end": 72.1062,
+          "charStart": 1055,
+          "charEnd": 1060
+        },
+        {
+          "start": 72.1062,
+          "end": 72.4085,
+          "charStart": 1061,
+          "charEnd": 1066
+        },
+        {
+          "start": 72.4085,
+          "end": 72.5975,
+          "charStart": 1067,
+          "charEnd": 1070
+        },
+        {
+          "start": 72.5975,
+          "end": 72.7865,
+          "charStart": 1071,
+          "charEnd": 1073
+        },
+        {
+          "start": 72.7865,
+          "end": 72.9755,
+          "charStart": 1074,
+          "charEnd": 1078
+        },
+        {
+          "start": 72.9755,
+          "end": 73.5424,
+          "charStart": 1079,
+          "charEnd": 1085
+        },
+        {
+          "start": 73.5424,
+          "end": 73.7314,
+          "charStart": 1086,
+          "charEnd": 1088
+        },
+        {
+          "start": 73.7314,
+          "end": 73.9203,
+          "charStart": 1089,
+          "charEnd": 1090
+        },
+        {
+          "start": 73.9203,
+          "end": 74.4873,
+          "charStart": 1091,
+          "charEnd": 1101
+        },
+        {
+          "start": 74.4873,
+          "end": 74.6761,
+          "charStart": 1102,
+          "charEnd": 1107
+        },
+        {
+          "start": 74.6761,
+          "end": 74.8651,
+          "charStart": 1108,
+          "charEnd": 1110
+        },
+        {
+          "start": 74.8651,
+          "end": 75.4698,
+          "charStart": 1111,
+          "charEnd": 1119
+        }
+      ]
+    },
+    "final_cover_20260812_005856.mp3": {
+      "id": "final_cover_20260812_005856.mp3",
+      "title": "Wakhi Song Lyrics Humit Muborak Bidganz Irfan Aly Iab Birk90Semdq",
+      "sourceFileName": "Wakhi_Song_-_Lyrics_humit_muborak_bidganz_-_Irfan_Aly_IAB-biRK90SEmDQ.wav",
+      "sourcePath": "/Users/test/Developer/ai-cover-studio/downloads/Wakhi_Song_-_Lyrics_humit_muborak_bidganz_-_Irfan_Aly_IAB-biRK90SEmDQ.wav",
+      "outputPath": "/Users/test/Developer/ai-cover-studio/outputs/final_cover_20260812_005856.mp3",
+      "voiceId": "arijit",
+      "voiceName": "arijit",
+      "createdAt": 1786478336.0,
+      "durationSec": 144.152,
+      "sizeBytes": 5768924,
+      "pitchShift": 0,
+      "voiceCharacter": 0.75,
+      "sampleRate": null,
+      "outputFormat": "mp3",
+      "origin": "generated",
+      "missing": false,
+      "stems": {
+        "vocals": "/Users/test/Developer/ai-cover-studio/outputs/cover_biy4mfv0/vocals.wav",
+        "instrumental": "/Users/test/Developer/ai-cover-studio/outputs/cover_biy4mfv0/instrumental.wav",
+        "vocalsFx": "/Users/test/Developer/ai-cover-studio/outputs/cover_biy4mfv0/cloned_vocals_fx.wav"
+      },
+      "stemSignature": "/Users/test/Developer/ai-cover-studio/downloads/Wakhi_Song_-_Lyrics_humit_muborak_bidganz_-_Irfan_Aly_IAB-biRK90SEmDQ.wav|51216242|1786478199|0.0|144.153",
+      "trimStart": 0.0,
+      "trimEnd": 144.15294751272745,
+      "vocalGainDb": 0.0,
+      "speed": 1.0,
+      "kind": "cover",
+      "text": null,
+      "speechVoice": null,
+      "speechRate": null,
+      "timings": null
+    },
+    "final_cover_20260815_031000.mp3": {
+      "id": "final_cover_20260815_031000.mp3",
+      "title": "Wakhi Song Lyrics Humit Muborak Bidganz Irfan Aly Iab Birk90Semdq",
+      "sourceFileName": "Wakhi_Song_-_Lyrics_humit_muborak_bidganz_-_Irfan_Aly_IAB-biRK90SEmDQ.wav",
+      "sourcePath": "/Users/test/Developer/ai-cover-studio/downloads/Wakhi_Song_-_Lyrics_humit_muborak_bidganz_-_Irfan_Aly_IAB-biRK90SEmDQ.wav",
+      "outputPath": "/Users/test/Developer/ai-cover-studio/outputs/final_cover_20260815_031000.mp3",
+      "voiceId": "sonu-nigam",
+      "voiceName": "sonu-nigam",
+      "createdAt": 1786745400.0,
+      "durationSec": 243.883,
+      "sizeBytes": 9758345,
+      "pitchShift": 0,
+      "voiceCharacter": 0.75,
+      "sampleRate": null,
+      "outputFormat": "mp3",
+      "origin": "generated",
+      "missing": false,
+      "stems": {
+        "vocals": "/Users/test/Developer/ai-cover-studio/outputs/cover_zcjysje2/vocals.wav",
+        "instrumental": "/Users/test/Developer/ai-cover-studio/outputs/cover_zcjysje2/instrumental.wav",
+        "vocalsFx": "/Users/test/Developer/ai-cover-studio/outputs/cover_zcjysje2/cloned_vocals_fx.wav"
+      },
+      "stemSignature": "/Users/test/Developer/ai-cover-studio/downloads/Wakhi_Song_-_Lyrics_humit_muborak_bidganz_-_Irfan_Aly_IAB-biRK90SEmDQ.wav|51216242|1786478199|13.174|257.057",
+      "trimStart": 13.173929546318737,
+      "trimEnd": 257.05686461154136,
+      "vocalGainDb": 0.0,
+      "speed": 1.0,
+      "kind": "cover",
+      "text": null,
+      "speechVoice": null,
+      "speechRate": null,
+      "timings": null
+    },
+    "final_cover_20260815_031424.mp3": {
+      "id": "final_cover_20260815_031424.mp3",
+      "title": "New Wakhi Song 2022 Dechor Azaad Zaraabadi Sajid Razi Wakhi Batfeloxh74",
+      "sourceFileName": "New_wakhi_song_2022_Dechor_Azaad_zaraabadi_Sajid_Razi_wakhi_-bATFELoxh74.wav",
+      "sourcePath": "/Users/test/Developer/ai-cover-studio/downloads/New_wakhi_song_2022_Dechor_Azaad_zaraabadi_Sajid_Razi_wakhi_-bATFELoxh74.wav",
+      "outputPath": "/Users/test/Developer/ai-cover-studio/outputs/final_cover_20260815_031424.mp3",
+      "voiceId": "sonu-nigam",
+      "voiceName": "sonu-nigam",
+      "createdAt": 1786745664.0,
+      "durationSec": 251.571,
+      "sizeBytes": 10065545,
+      "pitchShift": 0,
+      "voiceCharacter": 0.75,
+      "sampleRate": null,
+      "outputFormat": "mp3",
+      "origin": "generated",
+      "missing": false,
+      "stems": {
+        "vocals": "/Users/test/Developer/ai-cover-studio/outputs/cover_eay_3mqz/vocals.wav",
+        "instrumental": "/Users/test/Developer/ai-cover-studio/outputs/cover_eay_3mqz/instrumental.wav",
+        "vocalsFx": "/Users/test/Developer/ai-cover-studio/outputs/cover_eay_3mqz/cloned_vocals_fx.wav"
+      },
+      "stemSignature": "/Users/test/Developer/ai-cover-studio/downloads/New_wakhi_song_2022_Dechor_Azaad_zaraabadi_Sajid_Razi_wakhi_-bATFELoxh74.wav|50400386|1786302099|6.039|257.609",
+      "trimStart": 6.038645817254748,
+      "trimEnd": 257.60919924173953,
+      "vocalGainDb": 0.0,
+      "speed": 1.0,
+      "kind": "cover",
+      "text": null,
+      "speechVoice": null,
+      "speechRate": null,
+      "timings": null
+    },
+    "final_cover_20260815_032248.mp3": {
+      "id": "final_cover_20260815_032248.mp3",
+      "title": "Wiz Khalifa See You Again Ft Charlie Puth Lyrics Ndewxnmrq3C",
+      "sourceFileName": "Wiz_Khalifa_-_See_You_Again_ft_Charlie_Puth_Lyrics-NDEWXnMRq3c.wav",
+      "sourcePath": "/Users/test/Developer/ai-cover-studio/downloads/Wiz_Khalifa_-_See_You_Again_ft_Charlie_Puth_Lyrics-NDEWXnMRq3c.wav",
+      "outputPath": "/Users/test/Developer/ai-cover-studio/outputs/final_cover_20260815_032248.mp3",
+      "voiceId": "sonu-nigam",
+      "voiceName": "sonu-nigam",
+      "createdAt": 1786746168.0,
+      "durationSec": 229.901,
+      "sizeBytes": 9198279,
+      "pitchShift": 0,
+      "voiceCharacter": 0.75,
+      "sampleRate": null,
+      "outputFormat": "mp3",
+      "origin": "generated",
+      "missing": false,
+      "stems": {
+        "vocals": "/Users/test/Developer/ai-cover-studio/outputs/cover_tiz6cxx5/vocals.wav",
+        "instrumental": "/Users/test/Developer/ai-cover-studio/outputs/cover_tiz6cxx5/instrumental.wav",
+        "vocalsFx": "/Users/test/Developer/ai-cover-studio/outputs/cover_tiz6cxx5/cloned_vocals_fx.wav"
+      },
+      "stemSignature": "/Users/test/Developer/ai-cover-studio/downloads/Wiz_Khalifa_-_See_You_Again_ft_Charlie_Puth_Lyrics-NDEWXnMRq3c.wav|44141030|1786745975|0.0|0.0",
+      "trimStart": null,
+      "trimEnd": null,
+      "vocalGainDb": 0.0,
+      "speed": 1.0,
+      "kind": "cover",
+      "text": null,
+      "speechVoice": null,
+      "speechRate": null,
+      "timings": null
     }
   }
 }
