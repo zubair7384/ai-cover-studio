@@ -73,6 +73,7 @@ window.vocalis.onCommand?.((command) => {
     case "voices":        navigate("voices"); break;
     case "settings":      navigate("settings"); break;
     case "new-cover":     navigate("new-cover"); break;
+    case "batch":         navigate("batch"); break;
     case "speak":         navigate("speak"); break;
     case "train":         navigate("train"); break;
     case "toggle-sidebar": shell.toggleSidebar(); break;

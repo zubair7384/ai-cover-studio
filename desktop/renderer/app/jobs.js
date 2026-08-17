@@ -51,6 +51,32 @@ const PIPELINES = {
     doneTitle: "Clip ready",
     failTitle: "Speech failed",
   },
+  // A download has no pipeline: it is one long transfer, not a sequence of
+  // stages. It is here for the same reason a cover is — it takes minutes, so
+  // it must outlive the screen that started it and be cancellable from
+  // anywhere.
+  download: {
+    stageIds: [],
+    stageFromStep: () => null,
+    doneTitle: "Voice ready",
+    failTitle: "Download failed",
+    refresh: loadVoices,
+  },
+  // A batch is a queue of cover runs, so it borrows the cover pipeline for the
+  // song currently under way and tracks the rest of the queue in `items`.
+  batch: {
+    stageIds: COVER_STAGE_IDS,
+    stageFromStep: (text) => PIPELINES.cover.stageFromStep(text),
+    doneTitle: "Batch finished",
+    failTitle: "Batch failed",
+  },
+  pack: {
+    stageIds: [],
+    stageFromStep: () => null,
+    doneTitle: "Voice pack installed",
+    failTitle: "Pack install failed",
+    refresh: loadVoices,
+  },
 };
 
 const pipelineFor = (kind) => PIPELINES[kind] || PIPELINES.cover;
@@ -91,6 +117,7 @@ export async function startCover({ songPath, songName, voiceId, params, trim }) 
       index_rate: params.voiceCharacter,
       vocal_gain_db: params.vocalGain ?? 0,
       output_format: params.outputFormat || "mp3",
+      ...harmonyPayload(params),
       // Omitted entirely for a whole-song run, so the engine can tell "no trim"
       // from "a trim that happens to start at zero".
       ...(trim ? { trim_start: trim.start, trim_end: trim.end } : {}),
@@ -112,6 +139,117 @@ export async function startCover({ songPath, songName, voiceId, params, trim }) 
     progress: 0,
     stage: null,
     stages: {},                 // id -> { state, startedAt, durationSec }
+    startedAt: now(),
+    elapsedSec: 0,
+    etaSec: null,
+    note: "",
+    error: null,
+    errorDetail: null,
+    result: null,
+  };
+  set({ jobs: [...getState().jobs, job] });
+  syncSideEffects();
+
+  watch(job_id);
+  return job_id;
+}
+
+/**
+ * Queue several songs through one voice.
+ *
+ * One job rather than one per song, because the server runs them in a queue and
+ * the thing the user is waiting on is the queue, not any single track. The
+ * sidebar therefore shows one row that counts up, not ten rows fighting for
+ * space.
+ *
+ * @returns {Promise<string>} the job id
+ */
+export async function startBatch({ songs, voiceId, params }) {
+  const { job_id, total } = await fetch(`${origin()}/api/batch`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model_name: voiceId,
+      items: songs.map((s) => ({ path: s.path, name: s.name, title: s.title || "" })),
+      pitch_shift: params.pitchShift,
+      index_rate: params.voiceCharacter,
+      vocal_gain_db: params.vocalGain ?? 0,
+      output_format: params.outputFormat || "mp3",
+      ...harmonyPayload(params),
+    }),
+  }).then(async (res) => {
+    if (!res.ok) {
+      const detail = await res.json().catch(() => null);
+      throw new Error(detail?.detail || "The local engine refused the batch.");
+    }
+    return res.json();
+  });
+
+  const job = {
+    id: job_id,
+    kind: "batch",
+    name: `${total} song${total === 1 ? "" : "s"}`,
+    voiceId,
+    status: "running",
+    progress: 0,
+    stage: null,
+    stages: {},
+    startedAt: now(),
+    elapsedSec: 0,
+    etaSec: null,
+    note: "",
+    error: null,
+    errorDetail: null,
+    result: null,
+    // Per-song state, replaced wholesale by every `batch` event.
+    items: songs.map((s, i) => ({ index: i, name: s.name, status: "queued" })),
+    completed: 0,
+    total,
+  };
+  set({ jobs: [...getState().jobs, job] });
+  syncSideEffects();
+
+  watch(job_id);
+  return job_id;
+}
+
+/** Extra-vocal settings, in the shape both /api/convert and /api/batch take. */
+export function harmonyPayload(params) {
+  return {
+    harmony_preset: params.harmonyPreset || "none",
+    harmony_intervals: params.harmonyIntervals || null,
+    harmony_gain_db: params.harmonyGainDb,
+    double_track: Boolean(params.doubleTrack),
+  };
+}
+
+/**
+ * Install a voice pack. A job because a pack is several models and can be
+ * hundreds of megabytes, and because it changes the voice library when it
+ * lands.
+ * @returns {Promise<string>} the job id
+ */
+export async function startPackInstall({ path, name, overwrite = false }) {
+  const { job_id } = await fetch(`${origin()}/api/packs/install`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path, overwrite }),
+  }).then(async (res) => {
+    if (!res.ok) {
+      const detail = await res.json().catch(() => null);
+      throw new Error(detail?.detail || "The local engine refused the pack.");
+    }
+    return res.json();
+  });
+
+  const job = {
+    id: job_id,
+    kind: "pack",
+    name: name || "Voice pack",
+    status: "running",
+    progress: 0,
+    stage: null,
+    stages: {},
     startedAt: now(),
     elapsedSec: 0,
     etaSec: null,
@@ -180,6 +318,71 @@ export async function startSpeech({ text, voiceId, params }) {
   return job_id;
 }
 
+/**
+ * Start downloading a voice from the online catalog.
+ *
+ * The whole catalog record is kept on the job, not just the name: the Voices
+ * list pins in-progress downloads above everything else, and it has to be able
+ * to draw that card even when the voice is not in the current page, filter or
+ * search results.
+ *
+ * @returns {Promise<string>} the job id
+ */
+export async function startDownload(voice) {
+  const { job_id } = await fetch(`${origin()}/api/hf/download`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      repo_id: voice.repoId,
+      pth_path: voice.pthPath,
+      index_path: voice.indexPath || "",
+      name: voice.name,
+      category: voice.category || "",
+      gender: voice.gender || "",
+      portrait_name: voice.hasPortrait ? (voice.portraitName || voice.name) : "",
+    }),
+  }).then(async (res) => {
+    if (!res.ok) {
+      const detail = await res.json().catch(() => null);
+      throw new Error(detail?.detail || "The local engine refused the download.");
+    }
+    return res.json();
+  });
+
+  const job = {
+    id: job_id,
+    kind: "download",
+    name: voice.name,
+    voiceId: voice.id,
+    voice,                      // the full record, so the card can be redrawn
+    status: "running",
+    progress: 0,
+    stage: null,
+    stages: {},
+    startedAt: now(),
+    elapsedSec: 0,
+    etaSec: null,
+    note: "",
+    error: null,
+    errorDetail: null,
+    result: null,
+  };
+  set({ jobs: [...getState().jobs, job] });
+  syncSideEffects();
+
+  watch(job_id);
+  return job_id;
+}
+
+/** Every download currently in flight, newest last. */
+export const runningDownloads = () =>
+  getState().jobs.filter((j) => j.kind === "download" && j.status === "running");
+
+/** The in-flight download for a catalog voice, if any. */
+export const downloadFor = (voiceId) =>
+  getState().jobs.find((j) => j.kind === "download" && j.voiceId === voiceId
+                              && j.status === "running") || null;
+
 /** Attach to a job's SSE stream and keep the store in step. */
 function watch(id) {
   const source = api.jobEvents(id);
@@ -206,6 +409,22 @@ function watch(id) {
     if (!job) return;
 
     const cfg = pipelineFor(job.kind);
+
+    // The queue's own state, which arrives between songs rather than with the
+    // progress ticks. Kept separate so a failed song can be reported without
+    // interrupting the run.
+    if (msg.type === "batch") {
+      patch(id, {
+        items: msg.items || [],
+        completed: msg.completed ?? 0,
+        total: msg.total ?? job.total,
+        note: msg.note || "",
+        // Each song separates and converts afresh, so the pipeline meter has to
+        // start over rather than showing the last song's finished stages.
+        stages: {},
+      });
+      return;
+    }
 
     if (msg.type === "progress") {
       const stageId = cfg.stageFromStep((msg.step || "").toLowerCase());
@@ -257,10 +476,14 @@ function watch(id) {
       finish({ status: "done", progress: 1, stages, elapsedSec: elapsed,
         etaSec: 0, result: msg.result || null });
 
-      loadCovers();
+      // A download refreshes the voice library; everything else, the covers.
+      (cfg.refresh || loadCovers)();
       window.vocalis.notify({
         title: cfg.doneTitle,
-        body: job.name,
+        // A downloaded model that contradicts its own listing says so here,
+        // rather than only inside a screen the user may have navigated away
+        // from before it finished.
+        body: msg.result?.warning || job.name,
       });
       return;
     }

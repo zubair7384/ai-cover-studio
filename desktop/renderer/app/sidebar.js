@@ -32,6 +32,7 @@ const PLACES = [
  */
 const FLOW_ROWS = [
   { id: "new-cover", label: "New cover", icon: "plus", shortcut: "⌘N" },
+  { id: "batch", label: "Batch", icon: "import", shortcut: "⌘⇧B" },
   { id: "speak", label: "Speak", icon: "speech", shortcut: "⌘⇧S" },
   { id: "train", label: "Train a voice", icon: "mic", shortcut: "⌘⇧T" },
 ];
@@ -61,7 +62,8 @@ function activityRow(job) {
     type: "button",
     class: "nav-row",
     dataset: { job: job.id },
-    onclick: () => navigate({ train: "train", speech: "speak" }[job.kind] || "new-cover",
+    onclick: () => navigate({ train: "train", speech: "speak", batch: "batch",
+                              pack: "voices" }[job.kind] || "new-cover",
                             { flow: true }),
   },
     el("span", { class: "nav-row__ring" }, ring),

@@ -43,5 +43,68 @@
     "author": null,
     "createdAt": null,
     "datasetLength": null
+  },
+  "Kevin_test.pth": {
+    "_stamp": "55225115:1786869082",
+    "sampleRate": 40000,
+    "architecture": "v2",
+    "epochs": null,
+    "author": null,
+    "createdAt": null,
+    "datasetLength": null
+  },
+  "Adele.pth": {
+    "_stamp": "56266401:1786870084",
+    "sampleRate": 32000,
+    "architecture": "v2",
+    "epochs": null,
+    "author": null,
+    "createdAt": null,
+    "datasetLength": null
+  },
+  "Shakira.pth": {
+    "_stamp": "55228783:1786871162",
+    "sampleRate": 40000,
+    "architecture": "v2",
+    "epochs": null,
+    "author": null,
+    "createdAt": null,
+    "datasetLength": null
+  },
+  "Charlie_Puth.pth": {
+    "_stamp": "56274728:1786872365",
+    "sampleRate": 32000,
+    "architecture": "v2",
+    "epochs": 300,
+    "author": "None",
+    "createdAt": "2025-12-25T15:11:07.066747",
+    "datasetLength": null
+  },
+  "Atif.pth": {
+    "_stamp": "55192782:1786874514",
+    "sampleRate": 40000,
+    "architecture": "v2",
+    "epochs": null,
+    "author": null,
+    "createdAt": null,
+    "datasetLength": null
+  },
+  "Girlfriend.pth": {
+    "_stamp": "56279397:1786875028",
+    "sampleRate": 32000,
+    "architecture": "v2",
+    "epochs": null,
+    "author": null,
+    "createdAt": null,
+    "datasetLength": null
+  },
+  "Egirl.pth": {
+    "_stamp": "57589001:1786875779",
+    "sampleRate": 48000,
+    "architecture": "v2",
+    "epochs": null,
+    "author": null,
+    "createdAt": null,
+    "datasetLength": null
   }
 }

@@ -564,6 +564,115 @@
 /* Empty states may carry two equal-weight paths (train / import). */
 .empty__actions { display: flex; gap: var(--sp-2); align-items: center; }
 
+/* ---- Voices → Online (Hugging Face) ------------------------------------- */
+
+/* The tab wrapper is a pass-through: the two shelves each own a full .column,
+   so this must not add padding or the online tab would sit inset from the
+   local one. */
+.voices-tabs,
+.voices-tabs__body { display: flex; flex-direction: column; min-height: 0; }
+.voices-tabs__body { flex: 1; }
+
+/* An online voice is the same card as a local one with one difference: there
+   is no preview to play, so the action row does not hide behind hover. What it
+   costs and who published it stay readable without the pointer. */
+/* A tinted identity tile. The hue comes from the voice's name, so the great
+   majority of the catalog — which will never have a photograph — still gets a
+   face of its own rather than one shared grey square. Saturation stays low so a
+   wall of cards reads as one surface and not a bag of sweets. */
+.voice-tile--tinted {
+  position: relative;
+  overflow: hidden;
+  background: hsl(var(--tile-h, 40) 32% 26%);
+  color: hsl(var(--tile-h, 40) 65% 84%);
+}
+:root[data-theme="light"] .voice-tile--tinted {
+  background: hsl(var(--tile-h, 40) 52% 87%);
+  color: hsl(var(--tile-h, 40) 45% 27%);
+}
+
+/* The portrait covers the tile only once it has actually decoded — until then
+   the initial shows, so a card never flashes an empty box. */
+.voice-tile__photo {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity var(--dur-panel) var(--ease-enter);
+}
+.voice-tile[data-photo] .voice-tile__photo { opacity: 1; }
+
+/* The shelf's own filter bar. Sits above the count line so the numbers below it
+   read as the answer to whatever is set here. */
+.hf-filters {
+  display: flex; align-items: center; gap: var(--sp-2);
+  flex-wrap: wrap;
+  padding-bottom: var(--sp-3);
+}
+.hf-filters__spacer { flex: 1; min-width: var(--sp-2); }
+
+.hf-card__badges { display: flex; flex-wrap: wrap; gap: var(--sp-1); min-height: 18px; }
+.hf-card__badges:empty { display: none; }
+
+.hf-card__slot {
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  min-height: var(--ctl-md); justify-content: center;
+}
+.hf-card__meta {
+  color: var(--text-secondary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.hf-card__actions { display: flex; align-items: center; gap: var(--sp-2); }
+.hf-card__actions[hidden] { display: none; }
+
+/* Downloading replaces the actions in place rather than opening a modal, so
+   three voices can be arriving while you keep browsing. */
+.hf-card__progress { display: flex; flex-direction: column; gap: var(--sp-1); }
+.hf-card__progress[hidden] { display: none; }
+.hf-card__progress .meter { width: 100%; }
+/* Cancel sits on the same line as the readout: it belongs to this transfer,
+   and putting it below would push every card under it down mid-download. */
+.hf-card__progressrow {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--sp-2); min-width: 0;
+}
+.hf-card__stage {
+  flex: 1; min-width: 0;
+  color: var(--text-secondary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* A pinned download states why it is out of order, so its position above the
+   filters reads as deliberate rather than as a sorting bug. */
+.hf-card--downloading { border-color: var(--accent-border); }
+
+/* Already on this Mac: quieter, because the interesting rows are the ones you
+   do not have yet. */
+.hf-card--have { background: var(--bg-content); }
+.hf-card--have .voice-tile { opacity: 0.65; }
+
+/* A star reads as "on" by filling, not by changing shape or adding a chip. */
+.hf-card .icon-btn[data-on] { color: var(--accent); }
+
+.hf-more { display: flex; justify-content: center; padding: var(--sp-4) 0 var(--sp-2); }
+.hf-more:empty { display: none; }
+
+.hf-details { display: flex; flex-direction: column; gap: var(--sp-2); }
+.hf-details__row {
+  display: flex; justify-content: space-between; gap: var(--sp-4);
+  align-items: baseline;
+}
+.hf-details__row > :first-child { color: var(--text-secondary); flex: none; }
+.hf-details__row > :last-child {
+  text-align: right; min-width: 0; overflow-wrap: anywhere;
+}
+.hf-details__note {
+  color: var(--text-secondary);
+  margin: var(--sp-2) 0 0;
+  padding-top: var(--sp-3);
+  border-top: var(--hairline);
+}
+
 /* The quiet library summary sits above the list, per Prompt 3. */
 .list__lead {
   color: var(--text-secondary);
@@ -733,6 +842,62 @@
 .runpanel--failed { border-color: var(--err-500); }
 .runpanel__failhead { display: flex; align-items: center; gap: var(--sp-2); color: var(--err-text); }
 
+/* ---- Voice pack install sheet ------------------------------------------- */
+/* Installing a pack drops several models on the machine and may replace voices
+   already there, so the sheet lists what is inside before it offers to. */
+
+.packsheet { display: flex; flex-direction: column; gap: var(--sp-3); }
+.packsheet__list {
+  list-style: none; margin: 0; padding: 0;
+  max-height: 240px; overflow-y: auto;
+  border: var(--border-1);
+  border-radius: var(--r-control);
+}
+.packsheet__row {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--hairline);
+}
+.packsheet__row:last-child { border-bottom: 0; }
+.packsheet__row .t-caption { color: var(--text-secondary); }
+.packsheet__warn { color: var(--err-text); }
+
+/* ---- Batch queue -------------------------------------------------------- */
+/* The list IS the view here: a batch has no single result panel to look at, so
+   each song reports for itself and the row is where its state lives. */
+
+.batch__pickers {
+  display: flex; gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+
+.queue {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: var(--border-1);
+  border-radius: var(--r-card);
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+.queue__row {
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  min-height: 44px;
+  border-bottom: 1px solid var(--hairline);
+}
+.queue__row:last-child { border-bottom: 0; }
+.queue__index { color: var(--text-tertiary); min-width: 2ch; text-align: right; }
+.queue__main { flex: 1; min-width: 0; }
+.queue__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.queue__error { color: var(--err-text); }
+/* The song under way is the one the meter below is describing, so it is marked
+   in the same signal colour the meters use. */
+.queue__row--running { background: var(--tint); }
+.queue__row--skipped .queue__name,
+.queue__row--done .queue__name { color: var(--text-secondary); }
+
 /* ---- Inspector (§6) ----------------------------------------------------- */
 
 .inspector {
@@ -750,6 +915,24 @@
 }
 .inspector__advanced summary { cursor: pointer; color: var(--text-secondary); }
 .inspector__advanced[open] summary { margin-bottom: var(--sp-3); }
+/* Stacked fields inside a disclosure need the same rhythm as the ones outside
+   it, which the flex gap on .inspector__body does not reach. */
+.inspector__advanced[open] > *:not(summary) { margin-bottom: var(--sp-4); }
+.inspector__advanced[open] > *:last-child { margin-bottom: 0; }
+
+/* ---- Suggested pitch shift ---------------------------------------------- */
+/* Sits directly under the pitch slider: an offer with its reasoning, not a
+   control. The reasoning is the point — a bare "+5" would be a number from
+   nowhere, and the user has to be able to disagree with it on the evidence. */
+
+.pitchgroup { display: flex; flex-direction: column; gap: var(--sp-2); }
+.suggest {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+}
+.suggest__note { margin: 0; }
 
 /* At the 900px minimum width the inspector would squeeze the main column to
    nothing, so it drops below instead of clipping. */

@@ -42,6 +42,15 @@ const PATHS = {
   folder:  '<path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.4l1.4 1.8h5.2A1.5 1.5 0 0 1 14 6.3v5.2a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z"/>',
   export:  '<path d="M8 10.5V2.5M5 5.5 8 2.5l3 3"/><path d="M2.8 10v2.5A1.5 1.5 0 0 0 4.3 14h7.4a1.5 1.5 0 0 0 1.5-1.5V10"/>',
   import:  '<path d="M8 2.5v8M5 7.5 8 10.5l3-3"/><path d="M2.8 10v2.5A1.5 1.5 0 0 0 4.3 14h7.4a1.5 1.5 0 0 0 1.5-1.5V10"/>',
+  // Download is Import's arrow over a tray lip — the same gesture, aimed at
+  // this Mac rather than at the library.
+  download: '<path d="M8 2.2v7.6M4.9 6.7 8 9.8l3.1-3.1"/><path d="M2.8 11.6v.9A1.5 1.5 0 0 0 4.3 14h7.4a1.5 1.5 0 0 0 1.5-1.5v-.9"/>',
+  // One star, two states. `star` is the outline (not a favourite yet); the
+  // filled variant is the same path, and the fill is what carries the meaning.
+  star:      '<path d="M8 2.3l1.76 3.57 3.94.57-2.85 2.78.67 3.92L8 11.3l-3.52 1.85.67-3.92L2.3 6.44l3.94-.57z"/>',
+  "star-on": '<path d="M8 2.3l1.76 3.57 3.94.57-2.85 2.78.67 3.92L8 11.3l-3.52 1.85.67-3.92L2.3 6.44l3.94-.57z" fill="currentColor"/>',
+  // The Hub's silhouette in outline: a rounded face with two eyes and a smile.
+  cloud:   '<path d="M4.6 12.5a3.1 3.1 0 0 1-.36-6.18 4.1 4.1 0 0 1 7.86-.6 2.9 2.9 0 0 1-.4 5.78z"/>',
   trash:   '<path d="M2.8 4.5h10.4M6 4.5V3.2a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.3"/><path d="M4.2 4.5 4.8 13a1 1 0 0 0 1 .9h4.4a1 1 0 0 0 1-.9l.6-8.5"/>',
   // A cog: toothed ring + hub. The previous glyph was a circle with eight
   // radial spokes, which at 14px is indistinguishable from a sun icon — it

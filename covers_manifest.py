@@ -59,7 +59,7 @@ _TIMESTAMP_RE = re.compile(r"(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})")
 # (engine.OUTPUT_FORMATS). Both prefixes have to be here: anything this scan
 # misses gets flagged `missing` by reconcile() even though the file is right
 # there, which shows up in the UI as "Locate…" on a perfectly good clip.
-_OUTPUT_PREFIXES = ("final_cover", "speech")
+_OUTPUT_PREFIXES = ("final_cover", "speech", "karaoke")
 _OUTPUT_EXTS = ("mp3", "wav", "flac")
 COVER_GLOBS = tuple(f"{prefix}_*.{ext}"
                     for prefix in _OUTPUT_PREFIXES
@@ -80,6 +80,10 @@ def _cover_files():
 # the views filter on this field so spoken clips never clutter the covers list.
 KIND_COVER = "cover"
 KIND_SPEECH = "speech"
+# A backing track exported from a cover's separated stems. Its own kind rather
+# than a flag on the cover, because it is played, renamed, exported and deleted
+# exactly like anything else in the library.
+KIND_KARAOKE = "karaoke"
 
 ORIGIN_GENERATED = "generated"
 ORIGIN_LOCALSTORAGE = "localstorage"
@@ -187,10 +191,13 @@ def blank_record(name: str, *, origin: str) -> dict:
     size, mtime = _stat(path)
     created = timestamp_from_name(name) or mtime
     is_speech = name.startswith("speech_")
+    is_karaoke = name.startswith("karaoke_")
+    stamped = time.strftime("%-d %b, %H:%M", time.localtime(created))
     return {
         "id": name,
-        "title": ("Spoken clip — " + time.strftime("%-d %b, %H:%M", time.localtime(created)))
-                 if is_speech else title_for(None, created),
+        "title": ("Spoken clip — " + stamped) if is_speech
+                 else ("Karaoke — " + stamped) if is_karaoke
+                 else title_for(None, created),
         "sourceFileName": None,
         "sourcePath": None,
         "outputPath": str(path),
@@ -207,7 +214,9 @@ def blank_record(name: str, *, origin: str) -> dict:
         "missing": not path.exists(),
         # Recovered from disk, so the filename prefix is the only evidence of
         # which pipeline made it.
-        "kind": KIND_SPEECH if is_speech else KIND_COVER,
+        "kind": KIND_SPEECH if is_speech else KIND_KARAOKE if is_karaoke else KIND_COVER,
+        "stems": None,
+        "layers": None,
         "text": None,
         "speechVoice": None,
         "speechRate": None,
@@ -228,6 +237,7 @@ def record_generation(
     voice_character: Optional[float] = None,
     sample_rate: Optional[int] = None,
     stems: Optional[dict] = None,
+    layers: Optional[list] = None,
     stem_signature: Optional[str] = None,
     trim_start: Optional[float] = None,
     trim_end: Optional[float] = None,
@@ -270,6 +280,10 @@ def record_generation(
         # balance, speed and format be changed later without re-running the
         # model, and lets a re-run at a different pitch skip separation.
         "stems": stems or None,
+        # Harmony and double takes, with the gain and delay they were mixed at.
+        # Kept beside the stems for the same reason: a remix has to be able to
+        # rebuild the same arrangement without running the model again.
+        "layers": layers or None,
         "stemSignature": stem_signature,
         "trimStart": trim_start,
         "trimEnd": trim_end,

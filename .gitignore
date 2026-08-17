@@ -17,6 +17,15 @@ voice_models/
 *.log
 *.tmp
 
+# Locally built caches — regenerated on demand, megabytes of machine state.
+hf-cache.json
+portraits/
+voice-origins.json
+analysis-cache.json
+voice-profiles.json
+packs.json
+*.vocalispack
+
 # Electron desktop build artifacts
 desktop/node_modules/
 desktop/runtime/

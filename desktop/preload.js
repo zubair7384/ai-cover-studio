@@ -17,6 +17,8 @@ const api = {
   pickVoiceIndex: () => ipcRenderer.invoke("vocalis:pickVoiceIndex"),
   pickFolder: () => ipcRenderer.invoke("vocalis:pickFolder"),
   pickAudio: (title) => ipcRenderer.invoke("vocalis:pickAudio", title),
+  /** Open dialog for the app's own documents — .vocalis and .vocalispack. */
+  pickFile: (opts) => ipcRenderer.invoke("vocalis:pickFile", opts),
   pickAudioFiles: (title) => ipcRenderer.invoke("vocalis:pickAudioFiles", title),
   saveCover: (name) => ipcRenderer.invoke("vocalis:saveCover", name),
   savePath: (opts) => ipcRenderer.invoke("vocalis:savePath", opts),

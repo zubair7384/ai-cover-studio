@@ -238,8 +238,31 @@ def import_voice_bundle(pth_path: str, index_path: str = "", name: str = "") -> 
 # ---------------------------------------------------------------------------
 # Step 1 — stem separation (HTDemucs via audio-separator)
 # ---------------------------------------------------------------------------
-def separate_track(song_path: str, work_dir: Path) -> tuple[Path, Path]:
-    """Split the song into vocals.wav and instrumental.wav."""
+# HTDemucs names its outputs "(Drums)_htdemucs.wav" and so on. Anything the
+# model produces that isn't one of these still gets summed into the
+# instrumental — the map decides what is kept separately, never what is mixed.
+_STEM_ALIASES = {"vocals": "vocals", "drums": "drums", "bass": "bass",
+                 "other": "other", "guitar": "guitar", "piano": "piano"}
+
+
+def _stem_kind(name: str) -> str:
+    """Which instrument a separator output file holds, from its filename."""
+    lowered = name.lower()
+    for token, kind in _STEM_ALIASES.items():
+        if f"({token})" in lowered:
+            return kind
+    return ""
+
+
+def separate_stems(song_path: str, work_dir: Path) -> dict[str, Path]:
+    """
+    Split the song into its parts.
+
+    Returns every stem the separator produced, each under its own name, plus the
+    summed `instrumental` the mixer needs. Keeping the individual parts costs
+    nothing — the separator already wrote them — and it is what makes a karaoke
+    track and a stem export possible without a second separation pass.
+    """
     from audio_separator.separator import Separator
     from pydub import AudioSegment
 
@@ -260,15 +283,27 @@ def separate_track(song_path: str, work_dir: Path) -> tuple[Path, Path]:
     ]
     log.info("Separator produced: %s", [p.name for p in stem_paths])
 
-    vocal_stems = [p for p in stem_paths if "(vocals)" in p.name.lower()]
+    vocal_stems = [p for p in stem_paths if _stem_kind(p.name) == "vocals"]
     other_stems = [p for p in stem_paths if p not in vocal_stems]
     if not vocal_stems or not other_stems:
         raise RuntimeError(
             f"Unexpected separator output: {[p.name for p in stem_paths]}"
         )
 
+    # Renamed out of the separator's own naming scheme, because these paths are
+    # written into the manifest and read back by remix and export months later.
+    stems: dict[str, Path] = {}
     vocals_path = work_dir / "vocals.wav"
     shutil.copyfile(vocal_stems[0], vocals_path)
+    stems["vocals"] = vocals_path
+
+    for stem in other_stems:
+        kind = _stem_kind(stem.name)
+        if not kind or kind in stems:
+            continue
+        named = work_dir / f"{kind}.wav"
+        shutil.copyfile(stem, named)
+        stems[kind] = named
 
     log.info("Summing %d non-vocal stems into instrumental …", len(other_stems))
     instrumental = AudioSegment.from_file(other_stems[0])
@@ -276,8 +311,15 @@ def separate_track(song_path: str, work_dir: Path) -> tuple[Path, Path]:
         instrumental = instrumental.overlay(AudioSegment.from_file(stem))
     instrumental_path = work_dir / "instrumental.wav"
     instrumental.export(instrumental_path, format="wav")
+    stems["instrumental"] = instrumental_path
 
-    return vocals_path, instrumental_path
+    return stems
+
+
+def separate_track(song_path: str, work_dir: Path) -> tuple[Path, Path]:
+    """The two stems the mixer needs. Kept for callers that want only those."""
+    stems = separate_stems(song_path, work_dir)
+    return stems["vocals"], stems["instrumental"]
 
 
 # ---------------------------------------------------------------------------
@@ -289,8 +331,14 @@ def convert_vocals(
     pitch_shift: int,
     index_rate: float,
     work_dir: Path,
+    out_name: str = "cloned_vocals.wav",
 ) -> Path:
-    """Run the isolated vocals through the selected RVC model."""
+    """
+    Run the isolated vocals through the selected RVC model.
+
+    `out_name` matters once a run converts more than once: a harmony pass would
+    otherwise land on the take before it.
+    """
     from rvc_python.infer import RVCInference
 
     _allow_legacy_torch_load()
@@ -323,7 +371,7 @@ def convert_vocals(
         rms_mix_rate=0.25,
     )
 
-    cloned_path = work_dir / "cloned_vocals.wav"
+    cloned_path = work_dir / out_name
     log.info("Converting vocals with RMVPE pitch extraction …")
     rvc.infer_file(str(vocals_path), str(cloned_path))
 
@@ -335,7 +383,8 @@ def convert_vocals(
 # ---------------------------------------------------------------------------
 # Step 3 — vocal polish with Pedalboard
 # ---------------------------------------------------------------------------
-def apply_vocal_effects(cloned_path: Path, work_dir: Path) -> Path:
+def apply_vocal_effects(cloned_path: Path, work_dir: Path,
+                        out_name: str = "") -> Path:
     """Subtle compression + reverb + slap delay so the vocal sits in the mix."""
     from pedalboard import Compressor, Delay, HighpassFilter, Pedalboard, Reverb
     from pedalboard.io import AudioFile
@@ -348,7 +397,7 @@ def apply_vocal_effects(cloned_path: Path, work_dir: Path) -> Path:
         Delay(delay_seconds=0.22, feedback=0.12, mix=0.07),
     ])
 
-    fx_path = work_dir / "cloned_vocals_fx.wav"
+    fx_path = work_dir / (out_name or f"{cloned_path.stem}_fx.wav")
     log.info("Applying reverb/delay polish to cloned vocals …")
     with AudioFile(str(cloned_path)) as f:
         audio = f.read(f.frames)
@@ -371,6 +420,60 @@ OUTPUT_FORMATS = {
 
 
 SPEED_CHOICES = (0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0)
+
+
+# ---------------------------------------------------------------------------
+# Harmony and doubling
+#
+# A harmony is the same vocal converted again at an interval and tucked under
+# the lead. A double is the same vocal converted again at the same pitch and
+# nudged a few milliseconds late — the small timing difference between two takes
+# is what makes a doubled vocal sound wide rather than louder.
+#
+# Both cost one extra model pass each, which is why the UI states the count
+# before the run rather than after it.
+# ---------------------------------------------------------------------------
+# Thirds, in both directions. A third is the interval that sounds like a backing
+# vocal in almost any key; fifths and octaves are offered too because they are
+# the other two that reliably work without knowing the chord underneath.
+HARMONY_PRESETS = {
+    "none": [],
+    "third-up": [4],
+    "third-down": [-3],
+    "thirds": [-3, 4],
+    "fifth-up": [7],
+    "octave-down": [-12],
+    "choir": [-12, -3, 4, 7],
+}
+
+# Under the lead by default. Anything closer and the harmony reads as a second
+# lead singing slightly wrong notes.
+HARMONY_GAIN_DB = -9.0
+HARMONY_MIN_GAIN_DB = -24.0
+HARMONY_MAX_GAIN_DB = -3.0
+
+# Doubling: same pitch, late enough to be heard as a second take and early
+# enough not to be heard as an echo.
+DOUBLE_DELAY_MS = 18
+DOUBLE_GAIN_DB = -6.0
+
+MAX_VOCAL_LAYERS = 4
+
+
+def harmony_intervals(preset: str = "none",
+                      custom: Optional[list] = None) -> list[int]:
+    """Semitone offsets for a preset name, or a hand-picked list."""
+    if custom:
+        out = []
+        for value in custom[:MAX_VOCAL_LAYERS]:
+            try:
+                semitones = int(value)
+            except (TypeError, ValueError):
+                continue
+            if -12 <= semitones <= 12 and semitones != 0:
+                out.append(semitones)
+        return out
+    return list(HARMONY_PRESETS.get(str(preset or "none"), []))[:MAX_VOCAL_LAYERS]
 
 
 def _atempo_chain(speed: float) -> str:
@@ -414,8 +517,16 @@ def mix_and_export(
     vocal_gain_db: float,
     output_format: str = "mp3",
     speed: float = 1.0,
+    layers: Optional[list[dict]] = None,
+    prefix: str = "final_cover",
 ) -> Path:
-    """Overlay the polished vocals on the instrumental and export."""
+    """
+    Overlay the polished vocals on the instrumental and export.
+
+    `layers` are extra vocal takes — harmonies and doubles — each with its own
+    gain and a delay in milliseconds. They go under the lead, never over it: a
+    harmony that competes with the melody stops being a harmony.
+    """
     from pydub import AudioSegment
 
     spec = OUTPUT_FORMATS.get(str(output_format).lower(), OUTPUT_FORMATS["mp3"])
@@ -425,13 +536,26 @@ def mix_and_export(
     instrumental = AudioSegment.from_file(instrumental_path).apply_gain(-1.0)
     final = instrumental.overlay(vocals)
 
+    for layer in layers or []:
+        path = Path(layer.get("path") or "")
+        if not path.is_file():
+            # A layer whose file was cleaned up must not cost the user the mix.
+            log.warning("Skipping a missing vocal layer: %s", path)
+            continue
+        take = AudioSegment.from_file(path).apply_gain(
+            float(layer.get("gainDb", HARMONY_GAIN_DB)) + float(vocal_gain_db))
+        delay = int(layer.get("delayMs", 0) or 0)
+        log.info("Layering %s at %+.1f dB, %d ms late", path.name,
+                 float(layer.get("gainDb", HARMONY_GAIN_DB)), delay)
+        final = final.overlay(take, position=max(0, delay))
+
     stamp = time.strftime("%Y%m%d_%H%M%S")
-    out_path = OUTPUT_DIR / f"final_cover_{stamp}.{spec['ext']}"
+    out_path = OUTPUT_DIR / f"{prefix}_{stamp}.{spec['ext']}"
 
     if abs(float(speed) - 1.0) >= 1e-3:
         # Re-timed after mixing so the two stems can never drift apart, and
         # while still lossless so the only encode is the final one.
-        raw = OUTPUT_DIR / f"final_cover_{stamp}_pre.wav"
+        raw = OUTPUT_DIR / f"{prefix}_{stamp}_pre.wav"
         final.export(raw, format="wav")
         timed = change_speed(raw, float(speed), OUTPUT_DIR)
         final = AudioSegment.from_file(timed)
@@ -683,6 +807,23 @@ def _stem_signature(song_path: str, trim_start=None, trim_end=None) -> str:
             f"|{round(float(trim_end or 0), 3)}")
 
 
+def _stems_beside(vocals: Path, instrumental: Path) -> dict[str, Path]:
+    """
+    The full stem set for a reused separation.
+
+    `find_stems` only promises the two the mixer needs, but the rest were
+    written into the same working directory by the same run, so they are found
+    by looking rather than by separating again. A run from before the individual
+    stems were kept simply finds nothing extra, which is the correct outcome.
+    """
+    stems = {"vocals": vocals, "instrumental": instrumental}
+    for kind in _STEM_ALIASES.values():
+        candidate = vocals.parent / f"{kind}.wav"
+        if kind not in stems and candidate.is_file():
+            stems[kind] = candidate
+    return stems
+
+
 def _cached_stems(song_path: str, trim_start=None, trim_end=None):
     """(vocals, instrumental) from an earlier run of the same audio, or None."""
     try:
@@ -721,8 +862,11 @@ def remix_cover(
 
     log.info("Remixing %s at gain=%s speed=%sx format=%s",
              cover_id, vocal_gain_db, speed, output_format)
+    # Harmonies and doubles were converted when the cover was made, so a remix
+    # carries them across without another model run, exactly like the lead.
+    layers = record.get("layers") or []
     out_path = mix_and_export(vocals_fx, instrumental, float(vocal_gain_db),
-                              output_format, float(speed))
+                              output_format, float(speed), layers=layers)
 
     # The new file inherits the same stems, so it stays adjustable in turn.
     return covers_manifest.record_generation(
@@ -733,12 +877,166 @@ def remix_cover(
         pitch_shift=record.get("pitchShift"),
         voice_character=record.get("voiceCharacter"),
         stems=stems,
+        layers=layers or None,
         stem_signature=record.get("stemSignature"),
         trim_start=record.get("trimStart"),
         trim_end=record.get("trimEnd"),
         vocal_gain_db=float(vocal_gain_db),
         speed=float(speed),
     )
+
+
+# ---------------------------------------------------------------------------
+# Karaoke and stem export
+#
+# Both are free in compute terms: the separator already produced this audio
+# during the cover run and the manifest remembers where it went. What they need
+# is a real export — a named file in the library, in the format the user asked
+# for — rather than a link to a working file that a cleanup will one day delete.
+# ---------------------------------------------------------------------------
+STEM_LABELS = {
+    "instrumental": "Instrumental",
+    "vocals": "Original vocals",
+    "vocalsFx": "Cover vocals",
+    "drums": "Drums",
+    "bass": "Bass",
+    "other": "Other",
+    "guitar": "Guitar",
+    "piano": "Piano",
+}
+
+
+def available_stems(cover_id: str) -> list[dict]:
+    """Which stems of a cover are still on disk, in a sensible export order."""
+    import covers_manifest
+
+    record = covers_manifest.get(cover_id)
+    if not record:
+        return []
+
+    stems = record.get("stems") or {}
+    order = ["instrumental", "vocals", "vocalsFx", "drums", "bass",
+             "other", "guitar", "piano"]
+    out = []
+    for key in order:
+        path = Path(stems.get(key) or "")
+        if not path.is_file():
+            continue
+        out.append({
+            "key": key,
+            "label": STEM_LABELS.get(key, key.title()),
+            "sizeBytes": path.stat().st_size,
+        })
+    return out
+
+
+def export_karaoke(cover_id: str, output_format: str = "mp3",
+                   progress_cb: ProgressCb = None,
+                   log_cb: LogCb = None) -> dict:
+    """
+    Export a cover's backing track on its own — the song with no vocal at all.
+
+    Lands in the library as its own record rather than beside the cover: it is a
+    thing you play and hand to someone, not an attachment to something else.
+    """
+    import covers_manifest
+
+    progress = progress_cb or _noop_progress
+    record = covers_manifest.get(cover_id)
+    if not record:
+        raise ValueError("That cover is no longer in your library.")
+
+    instrumental = Path((record.get("stems") or {}).get("instrumental") or "")
+    if not instrumental.is_file():
+        raise ValueError(
+            "This cover's separated backing track is gone, so there's nothing "
+            "to export. Generate the cover again and the new copy will have it.")
+
+    progress(0.2, "Exporting the backing track", "")
+    from pydub import AudioSegment
+
+    spec = OUTPUT_FORMATS.get(str(output_format).lower(), OUTPUT_FORMATS["mp3"])
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+    out_path = OUTPUT_DIR / f"karaoke_{stamp}.{spec['ext']}"
+
+    audio = AudioSegment.from_file(instrumental)
+    speed = float(record.get("speed") or 1.0)
+    if abs(speed - 1.0) >= 1e-3:
+        # Matched to the cover it came from: a backing track at a different
+        # tempo to the vocal it was made for is useless for singing along.
+        raw = OUTPUT_DIR / f"karaoke_{stamp}_pre.wav"
+        audio.export(raw, format="wav")
+        timed = change_speed(raw, speed, OUTPUT_DIR)
+        audio = AudioSegment.from_file(timed)
+        raw.unlink(missing_ok=True)
+        timed.unlink(missing_ok=True)
+
+    audio.export(out_path, format=spec["format"], **spec["params"])
+    log.info("Saved karaoke track -> %s", out_path)
+
+    progress(0.9, "Adding it to your library", "")
+    title = (record.get("title") or "").strip()
+    result = covers_manifest.record_generation(
+        out_path,
+        voice_id="",
+        source_path=record.get("sourcePath"),
+        source_file_name=record.get("sourceFileName"),
+        stems=record.get("stems"),
+        stem_signature=record.get("stemSignature"),
+        trim_start=record.get("trimStart"),
+        trim_end=record.get("trimEnd"),
+        speed=record.get("speed"),
+        kind=covers_manifest.KIND_KARAOKE,
+        title=f"{title} (karaoke)" if title else "",
+    )
+    progress(1.0, "Done!", "")
+    return result
+
+
+def export_stems(cover_id: str, dest_dir: str, keys: Optional[list] = None,
+                 output_format: str = "wav",
+                 progress_cb: ProgressCb = None,
+                 log_cb: LogCb = None) -> dict:
+    """
+    Write a cover's separated parts into a folder the user picked.
+
+    WAV by default because the destination for these is a DAW, and re-encoding
+    a stem to MP3 on the way into a mix is a loss for no benefit.
+    """
+    import covers_manifest
+    from pydub import AudioSegment
+
+    progress = progress_cb or _noop_progress
+    record = covers_manifest.get(cover_id)
+    if not record:
+        raise ValueError("That cover is no longer in your library.")
+
+    destination = Path(dest_dir).expanduser()
+    if not destination.is_dir():
+        raise ValueError("Choose a folder to write the stems into.")
+
+    stems = record.get("stems") or {}
+    wanted = [s["key"] for s in available_stems(cover_id)
+              if not keys or s["key"] in set(keys)]
+    if not wanted:
+        raise ValueError("None of this cover's stems are still on disk.")
+
+    spec = OUTPUT_FORMATS.get(str(output_format).lower(), OUTPUT_FORMATS["wav"])
+    base = _safe_stem(record.get("title") or Path(cover_id).stem) or "cover"
+    folder = destination / base
+    folder.mkdir(parents=True, exist_ok=True)
+
+    written = []
+    for i, key in enumerate(wanted):
+        progress((i + 1) / (len(wanted) + 1), f"Writing {STEM_LABELS.get(key, key)}", "")
+        out_path = folder / f"{base}_{key}.{spec['ext']}"
+        AudioSegment.from_file(stems[key]).export(
+            out_path, format=spec["format"], **spec["params"])
+        written.append(str(out_path))
+        log.info("Exported stem %s -> %s", key, out_path)
+
+    progress(1.0, "Done!", "")
+    return {"folder": str(folder), "files": written, "count": len(written)}
 
 
 # ---------------------------------------------------------------------------
@@ -781,6 +1079,11 @@ def generate_cover(
     trim_start: Optional[float] = None,
     trim_end: Optional[float] = None,
     speed: float = 1.0,
+    harmony_preset: str = "none",
+    harmony_intervals_custom: Optional[list] = None,
+    harmony_gain_db: float = HARMONY_GAIN_DB,
+    double_track: bool = False,
+    title: str = "",
 ) -> Path:
     """
     Run the full cover pipeline. Reports progress via callbacks and returns the
@@ -814,29 +1117,74 @@ def generate_cover(
         # a re-run of the same song at a different pitch reuses the stems from
         # the last one. This is what makes iterating on the voice settings
         # bearable — the model step alone is seconds, not minutes.
-        vocals = instrumental = None
+        stems: dict[str, Path] = {}
         cached = _cached_stems(song_path, trim_start, trim_end)
         if cached:
             vocals, instrumental = cached
+            stems = _stems_beside(vocals, instrumental)
             progress(0.44, "Step 1/4 — reusing the separated stems",
                      "Same song as the last run, so this step is already done.")
             log.info("Reusing stems from %s", vocals.parent)
         else:
             progress(0.05, "Step 1/4 — separating vocals & instrumental (HTDemucs)",
                      "First run downloads the separation model (~85 MB).")
-            vocals, instrumental = separate_track(pipeline_input, work_dir)
+            stems = separate_stems(pipeline_input, work_dir)
+            vocals, instrumental = stems["vocals"], stems["instrumental"]
+
+        # Every extra take is another pass over the same model, so the middle of
+        # the run is divided between them rather than the lead taking all of it.
+        intervals = harmony_intervals(harmony_preset, harmony_intervals_custom)
+        takes = 1 + len(intervals) + (1 if double_track else 0)
+        span = 0.35 / takes           # 0.45 → 0.80 is the conversion window
 
         progress(0.45, "Step 2/4 — cloning vocals with RVC (RMVPE)",
-                 "First run downloads the RMVPE pitch model (~180 MB).")
+                 "First run downloads the RMVPE pitch model (~180 MB)."
+                 if takes == 1 else
+                 f"Lead vocal, then {takes - 1} more take"
+                 f"{'s' if takes > 2 else ''}.")
         cloned = convert_vocals(vocals, model_name, int(pitch_shift),
                                 float(index_rate), work_dir)
 
-        progress(0.80, "Step 3/4 — polishing vocals (reverb/delay)", "")
+        progress(0.45 + span, "Step 3/4 — polishing vocals (reverb/delay)", "")
         polished = apply_vocal_effects(cloned, work_dir)
+
+        # Harmonies and doubles are converted from the same isolated vocal as
+        # the lead, so nothing here needs the separator again.
+        layers: list[dict] = []
+        for i, interval in enumerate(intervals):
+            progress(0.45 + span * (i + 1),
+                     "Step 2/4 — cloning vocals with RVC (RMVPE)",
+                     f"Harmony {i + 1} of {len(intervals)}, "
+                     f"{interval:+d} semitones.")
+            tag = f"harmony_{'up' if interval > 0 else 'down'}{abs(interval)}"
+            take = convert_vocals(vocals, model_name,
+                                  int(pitch_shift) + int(interval),
+                                  float(index_rate), work_dir,
+                                  out_name=f"{tag}.wav")
+            layers.append({
+                "path": str(apply_vocal_effects(take, work_dir)),
+                "gainDb": float(harmony_gain_db),
+                "delayMs": 0,
+                "semitones": int(interval),
+            })
+
+        if double_track:
+            progress(0.45 + span * (len(intervals) + 1),
+                     "Step 2/4 — cloning vocals with RVC (RMVPE)",
+                     "Doubling the lead.")
+            take = convert_vocals(vocals, model_name, int(pitch_shift),
+                                  float(index_rate), work_dir,
+                                  out_name="double.wav")
+            layers.append({
+                "path": str(apply_vocal_effects(take, work_dir)),
+                "gainDb": DOUBLE_GAIN_DB,
+                "delayMs": DOUBLE_DELAY_MS,
+                "semitones": 0,
+            })
 
         progress(0.92, "Step 4/4 — mixing & exporting", "")
         final_path = mix_and_export(polished, instrumental, float(vocal_gain_db),
-                                    output_format, float(speed))
+                                    output_format, float(speed), layers=layers)
 
         # Record what this cover actually IS, with the parameters actually
         # used, before anything else can observe the file. Written here rather
@@ -850,14 +1198,18 @@ def generate_cover(
                 source_file_name=source_file_name or Path(song_path).name,
                 pitch_shift=int(pitch_shift),
                 voice_character=float(index_rate),
-                stems={"vocals": str(vocals),
-                       "instrumental": str(instrumental),
+                # Every stem, not only the two the mixer used: a karaoke track
+                # and a stem export both come out of this record later, and
+                # separating the song again to get them would be absurd.
+                stems={**{k: str(v) for k, v in stems.items()},
                        "vocalsFx": str(polished)},
+                layers=layers or None,
                 stem_signature=_stem_signature(song_path, trim_start, trim_end),
                 trim_start=trim_start,
                 trim_end=trim_end,
                 vocal_gain_db=float(vocal_gain_db),
                 speed=float(speed),
+                title=title,
             )
         except Exception:
             # A manifest failure must never lose the user their cover.

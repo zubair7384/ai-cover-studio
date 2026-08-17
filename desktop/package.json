@@ -46,6 +46,18 @@
         "to": "backend/server.py"
       },
       {
+        "from": "../covers_manifest.py",
+        "to": "backend/covers_manifest.py"
+      },
+      {
+        "from": "../voices_manifest.py",
+        "to": "backend/voices_manifest.py"
+      },
+      {
+        "from": "../hf_voices.py",
+        "to": "backend/hf_voices.py"
+      },
+      {
         "from": "runtime",
         "to": "backend/runtime"
       },

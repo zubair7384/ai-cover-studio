@@ -18,7 +18,7 @@ import { icon as makeIcon } from "../lib/icons.js";
 import { getState, set, subscribe } from "../app/store.js";
 import { play } from "../app/now-playing.js";
 import { navigate } from "../app/router.js";
-import { mediaUrl, loadCovers, api } from "../app/api.js";
+import { mediaUrl, loadCovers, runJob, api } from "../app/api.js";
 import { getPeaks, peekPeaks } from "../app/peaks.js";
 import { toast } from "../app/toast.js";
 import { openCoverDetail } from "./cover-detail.js";
@@ -41,6 +41,8 @@ const SORTS = [
 const KINDS = {
   cover: {
     kind: "cover",
+    // Karaoke tracks are exported from covers and live with them.
+    kinds: ["cover", "karaoke"],
     title: "Covers",
     noun: "cover",
     icon: "waveform",
@@ -52,6 +54,7 @@ const KINDS = {
   },
   speech: {
     kind: "speech",
+    kinds: ["speech"],
     title: "Spoken",
     noun: "clip",
     icon: "speech",
@@ -200,6 +203,48 @@ const exportItems = (items) => window.vocalis.exportFiles(
        .map((i) => ({ path: i.outputPath, name: `${i.title}.${i.outputFormat || "mp3"}` }))
 );
 
+/* ---- exports built from a cover's separated stems ------------------------ */
+/*
+ * Both of these are nearly free: the separator already produced this audio
+ * during the cover run and the manifest remembers where it went. What they are
+ * not is instant — an encode of a five-minute track takes a moment — so they go
+ * through the job stream and report when they land.
+ *
+ * A cover whose working files were cleaned up cannot do either. Rather than
+ * hiding the actions (which would leave the user wondering where they went),
+ * they run and the engine explains what happened.
+ */
+async function exportKaraoke(item) {
+  toast({ message: `Making a backing track from ${item.title}…` });
+  try {
+    const { job_id } = await api.karaoke({ id: item.id,
+                                           outputFormat: item.outputFormat || "mp3" });
+    const cover = await runJob(job_id);
+    await loadCovers();
+    toast({ message: `Saved “${cover.title}” to your library.` });
+  } catch (err) {
+    toast({ message: err.message });
+  }
+}
+
+async function exportStems(item) {
+  const folder = await window.vocalis.pickFolder();
+  if (!folder) return;
+
+  toast({ message: `Writing the stems of ${item.title}…` });
+  try {
+    const { job_id } = await api.exportStems({ id: item.id, destDir: folder });
+    const result = await runJob(job_id);
+    toast({
+      message: `Wrote ${result.count} stem${result.count === 1 ? "" : "s"}.`,
+      actionLabel: "Show in Finder",
+      onAction: () => window.vocalis.revealPath(result.files[0]),
+    });
+  } catch (err) {
+    toast({ message: err.message });
+  }
+}
+
 /* ---- row ---------------------------------------------------------------- */
 
 function menuItems(item, selected) {
@@ -220,6 +265,14 @@ function menuItems(item, selected) {
     { separator: true },
     { label: targets.length > 1 ? `Export ${targets.length}…` : "Export…", icon: "export",
       onSelect: () => exportItems(targets) },
+    // Only for covers: a spoken clip was never separated, and a karaoke track
+    // has no vocal to remove from itself.
+    ...(item.kind === "cover" ? [
+      { label: "Export karaoke track", icon: "waveform", disabled: targets.length > 1,
+        onSelect: () => exportKaraoke(item) },
+      { label: "Export stems…", icon: "export", disabled: targets.length > 1,
+        onSelect: () => exportStems(item) },
+    ] : []),
     { label: "Rename", disabled: targets.length > 1, onSelect: () => promptRename(item) },
     { separator: true },
     { label: targets.length > 1 ? `Delete ${targets.length}` : "Delete",
@@ -236,8 +289,10 @@ function Row(item, { selected, index, onSelect, selectionItems }) {
   const paintCaption = (dur) => {
     caption.textContent = [
       // No kind label here any more: each kind has its own page, so the view
-      // title already says it and repeating it in every row is noise.
-      item.voice || "Unknown voice",
+      // title already says it and repeating it in every row is noise. The one
+      // exception is a karaoke track, which shares the Covers page and has no
+      // voice by definition — "Unknown voice" would read as a fault.
+      item.kind === "karaoke" ? "Backing track" : (item.voice || "Unknown voice"),
       dur ? fmt.duration(dur) : null,
       fmt.bytes(item.size),
     ].filter(Boolean).join(" · ");
@@ -407,9 +462,11 @@ function LibraryView(config) {
 
   function paint() {
     const { covers: all, loading, error, query, selection } = getState();
-    // One manifest holds both kinds; this view only ever shows its own. Records
-    // written before Speak existed carry no kind and are all covers.
-    const covers = all.filter((c) => (c.kind || "cover") === config.kind);
+    // One manifest holds every kind; this view only ever shows its own. Records
+    // written before Speak existed carry no kind and are all covers, and a
+    // karaoke track belongs with the cover it came out of rather than in a
+    // third place of its own.
+    const covers = all.filter((c) => config.kinds.includes(c.kind || "cover"));
 
     rows.forEach((r) => r.destroy?.());
     rows = [];

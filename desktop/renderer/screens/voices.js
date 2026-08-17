@@ -14,14 +14,17 @@
 import { el, cls } from "../lib/dom.js";
 import { icon as makeIcon } from "../lib/icons.js";
 import {
-  Button, Checkbox, ContextMenu, EmptyState, IconButton, Menu,
+  Button, Checkbox, ContextMenu, EmptyState, IconButton, Menu, Segmented,
   Select, Sheet, Spinner, TextField, LoadingRows, ErrorPanel,
 } from "../components/primitives/index.js";
 import { Waveform } from "../components/meter/index.js";
-import { getState, set, subscribe } from "../app/store.js";
+import { getState, set, setVoicesTab, subscribe } from "../app/store.js";
+import { OnlineVoices } from "./voices-online.js";
 import { navigate } from "../app/router.js";
 import { api, loadVoices, runJob } from "../app/api.js";
-import { initials } from "../app/profile.js";
+import { startPackInstall } from "../app/jobs.js";
+import { toast } from "../app/toast.js";
+import { Avatar } from "../app/avatar.js";
 import * as fmt from "../app/format.js";
 
 const SORTS = [
@@ -107,6 +110,85 @@ const exportModel = (voice) =>
   window.vocalis.exportFiles([{ path: voice.pthPath, name: `${voice.name}.pth` }]);
 
 /**
+ * State where a voice sits, so New cover can suggest a pitch shift for it.
+ *
+ * Vocalis measures this itself for voices trained here, from the training
+ * audio. A downloaded model has no audio attached, so there is nothing to
+ * measure and nothing to suggest — until someone says. One dropdown, once.
+ */
+const RANGE_LABELS = {
+  bass: "Bass — deep male",
+  baritone: "Baritone — male",
+  tenor: "Tenor — higher male",
+  alto: "Alto — lower female",
+  mezzo: "Mezzo — female",
+  soprano: "Soprano — higher female",
+};
+
+async function setVocalRange(voice) {
+  let ranges = [];
+  let current = {};
+  try {
+    [{ ranges }, current] = await Promise.all([
+      api.voiceRanges(), api.voiceProfile(voice.name),
+    ]);
+  } catch (err) {
+    return toast({ message: err.message });
+  }
+
+  // A measured voice is not offered the dropdown: overriding a measurement off
+  // real audio with a category would be a downgrade.
+  if (current.source === "training-set") {
+    const sheet = Sheet({
+      title: `${voice.name} sits around ${current.note}`,
+      body: "Measured from the recordings you trained it on, so there's nothing "
+            + "to set by hand.",
+      actions: [Button({ label: "OK", variant: "primary", onClick: () => sheet.close() })],
+    });
+    return;
+  }
+
+  const select = Select({
+    label: "Range",
+    options: [
+      { value: "", label: "Not set" },
+      ...ranges.map((r) => ({ value: r.key,
+                              label: `${RANGE_LABELS[r.key] || r.key} (${r.note})` })),
+    ],
+    value: current.source === "manual"
+      ? (ranges.find((r) => Math.abs(r.hz - current.medianF0) < 0.5)?.key || "")
+      : "",
+    help: current.source === "gender"
+      ? `Currently guessed from its catalog listing (around ${current.note}).`
+      : "Used to suggest a pitch shift when you pick a song.",
+  });
+
+  const sheet = Sheet({
+    title: `Vocal range of “${voice.name}”`,
+    body: select,
+    actions: [
+      Button({ label: "Cancel", variant: "secondary", onClick: () => sheet.close() }),
+      Button({
+        label: "Save", variant: "primary",
+        onClick: async () => {
+          const value = select.input.value;
+          sheet.close();
+          try {
+            const saved = await api.setVoiceProfile({
+              name: voice.name, range: value, clear: !value });
+            toast({ message: saved.medianF0
+              ? `${voice.name} sits around ${saved.note}.`
+              : `Cleared the range for ${voice.name}.` });
+          } catch (err) {
+            toast({ message: err.message });
+          }
+        },
+      }),
+    ],
+  });
+}
+
+/**
  * Render a preview clip by running a reference vocal through the RVC step.
  * The user supplies the reference, because nothing in the app ships one and
  * inventing audio would be worse than asking.
@@ -151,6 +233,8 @@ function menuItems(voice, setBusy) {
       onSelect: () => {},
     },
     { separator: true },
+    { label: "Set vocal range…", icon: "waveform",
+      onSelect: () => setVocalRange(voice) },
     { label: "Rename", onSelect: () => promptRename(voice) },
     { label: "Show in Finder", icon: "folder",
       onSelect: () => window.vocalis.revealPath(voice.pthPath) },
@@ -248,7 +332,7 @@ function Row(voice, selected) {
     dataset: { id: voice.name },
   },
     el("div", { class: "vcard__head" },
-      el("span", { class: "voice-tile" }, initials(voice.name)),
+      Avatar(voice),
       el("span", { class: "vcard__name t-head" }, voice.name),
       IconButton({ icon: "more-horizontal", label: `More actions for ${voice.name}`,
         onClick: (e) => { e.stopPropagation(); Menu(e.currentTarget, menuItems(voice, setBusy)); } }),
@@ -282,7 +366,7 @@ function Row(voice, selected) {
 
 /* ---- view --------------------------------------------------------------- */
 
-export function VoicesView() {
+function LocalVoices() {
   const list = el("div", { class: "list", role: "listbox", "aria-label": "Voices" });
   const footer = el("div", { class: "list__lead t-caption" }, "");
   const root = el("div", { class: "column column--cards" }, footer, list);
@@ -295,6 +379,77 @@ export function VoicesView() {
     if (!files?.length) return;
     await api.importModels(files).catch(() => {});
     await loadVoices();
+  }
+
+  /* Voice packs.
+   *
+   * A pack is several voices, their previews and their terms in one file, so
+   * installing one is a decision rather than a file copy: the sheet says what
+   * is inside, what it will overwrite and what the licence allows, and only
+   * then offers to install.
+   */
+  async function installPack() {
+    const path = await window.vocalis.pickFile({
+      title: "Open voice pack",
+      name: "Vocalis voice pack",
+      extensions: ["vocalispack"],
+    });
+    if (!path) return;
+
+    let pack;
+    try {
+      pack = await api.inspectPack(path);
+    } catch (err) {
+      return toast({ message: err.message });
+    }
+
+    const conflicts = pack.conflicts || [];
+    const body = el("div", { class: "packsheet" },
+      el("div", { class: "t-body" }, pack.description || ""),
+      el("div", { class: "t-caption" },
+        [pack.author ? `By ${pack.author}` : null,
+         `${pack.voices.length} voice${pack.voices.length === 1 ? "" : "s"}`,
+         fmt.bytes(pack.sizeBytes),
+         pack.licenceLabel].filter(Boolean).join(" · ")),
+      el("ul", { class: "packsheet__list" },
+        ...pack.voices.map((v) => el("li", { class: "packsheet__row" },
+          el("span", { class: "t-body-em" }, v.name),
+          el("span", { class: "t-caption" },
+            [v.gender, v.hasIndex ? "index" : null, v.hasPreview ? "preview" : null,
+             v.conflict ? "already installed" : null].filter(Boolean).join(" · ")),
+        ))),
+      // Overwriting is never the default: a voice the user trained here and a
+      // voice from a pack can share a name, and only one of them can be
+      // retrained.
+      conflicts.length
+        ? el("div", { class: "packsheet__warn t-caption" },
+            `Installing replaces ${conflicts.length} voice`
+            + `${conflicts.length === 1 ? "" : "s"} you already have `
+            + `(${conflicts.join(", ")}).`)
+        : null,
+    );
+
+    const sheet = Sheet({
+      title: pack.name,
+      body,
+      actions: [
+        Button({ label: "Cancel", variant: "secondary", onClick: () => sheet.close() }),
+        Button({
+          label: conflicts.length ? "Install and replace" : "Install",
+          variant: conflicts.length ? "destructive" : "primary",
+          fill: true,
+          onClick: async () => {
+            sheet.close();
+            try {
+              await startPackInstall({ path, name: pack.name,
+                                       overwrite: conflicts.length > 0 });
+            } catch (err) {
+              toast({ message: err.message });
+            }
+          },
+        }),
+      ],
+    });
   }
 
   const sortSelect = Select({
@@ -370,19 +525,73 @@ export function VoicesView() {
   paint();
   const off = subscribe(["voices", "loading", "error", "query", "selection"], paint);
 
-  root.toolbar = {
-    title: "Voices",
-    actions: [
-      sortSelect,
-      Button({ label: "Import…", variant: "secondary", icon: "import", onClick: importVoice }),
-      Button({ label: "Train a voice", variant: "primary", icon: "plus",
-        onClick: () => navigate("train") }),
-    ],
-  };
+  root.toolbarActions = [
+    sortSelect,
+    Button({ label: "Install pack…", variant: "tertiary", icon: "import",
+      onClick: installPack }),
+    Button({ label: "Import…", variant: "secondary", icon: "import", onClick: importVoice }),
+    Button({ label: "Train a voice", variant: "primary", icon: "plus",
+      onClick: () => navigate("train") }),
+  ];
   root.destroy = () => {
     off();
     rows.forEach((r) => r.destroy?.());
     activePreview?.();
   };
+  return root;
+}
+
+/* ---- tabs --------------------------------------------------------------- */
+
+/**
+ * Voices is one place with two shelves: what is on this Mac, and what is a
+ * download away. The tab sits in the toolbar rather than the sidebar because
+ * both shelves hold the same kind of thing — swapping between them is a filter,
+ * not a change of place.
+ */
+export function VoicesView() {
+  const body = el("div", { class: "voices-tabs__body" });
+  const root = el("div", { class: "voices-tabs" }, body);
+
+  let active = null;
+  let tab = getState().voicesTab === "online" ? "online" : "local";
+
+  const tabs = Segmented({
+    options: [
+      { value: "local", label: "On this Mac" },
+      { value: "online", label: "Online" },
+    ],
+    value: tab,
+    ariaLabel: "Which voices to show",
+    onChange: (v) => { tab = v; setVoicesTab(v); mount(); },
+  });
+
+  // The shell attaches `setToolbar` only after the view is constructed, so the
+  // first tab's actions have to be remembered and handed over via `root.toolbar`.
+  let pending = [];
+  function setToolbar(actions) {
+    pending = actions;
+    root.setToolbar?.({ title: "Voices", actions: [tabs, ...actions] });
+  }
+
+  function mount() {
+    active?.destroy?.();
+    body.innerHTML = "";
+    // The two shelves do not share a search term: "adele" means one thing in a
+    // library of four voices and another in a catalog of thousands.
+    set({ query: "", selection: [] });
+
+    active = tab === "online"
+      ? OnlineVoices({ onToolbar: setToolbar })
+      : LocalVoices();
+
+    body.appendChild(active);
+    if (tab !== "online") setToolbar(active.toolbarActions || []);
+  }
+
+  mount();
+
+  root.toolbar = { title: "Voices", actions: [tabs, ...pending] };
+  root.destroy = () => active?.destroy?.();
   return root;
 }

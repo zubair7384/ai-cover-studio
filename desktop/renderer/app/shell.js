@@ -14,13 +14,15 @@ import { titleFor } from "./router.js";
 import { CoversView, SpokenView } from "../screens/covers.js";
 import { VoicesView } from "../screens/voices.js";
 import { NewCoverFlow } from "../screens/new-cover.js";
+import { BatchFlow } from "../screens/batch.js";
 import { SpeakFlow } from "../screens/speak.js";
 import { TrainFlow } from "../screens/train.js";
 import { SettingsView } from "../settings/settings.js";
 
 const VIEWS = { covers: CoversView, spoken: SpokenView, voices: VoicesView };
 const FLOW_VIEWS = {
-  "new-cover": NewCoverFlow, speak: SpeakFlow, train: TrainFlow, settings: SettingsView,
+  "new-cover": NewCoverFlow, batch: BatchFlow, speak: SpeakFlow,
+  train: TrainFlow, settings: SettingsView,
 };
 
 export function Shell() {

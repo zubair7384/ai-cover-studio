@@ -23,7 +23,68 @@ from typing import Any, Optional
 import engine
 
 CACHE_PATH = engine.DATA_DIR / "voices-cache.json"
+ORIGINS_PATH = engine.DATA_DIR / "voice-origins.json"
 PREVIEW_SUFFIX = ".preview.mp3"
+
+
+# ---------------------------------------------------------------------------
+# Provenance
+#
+# A `.pth` on disk says nothing about where it came from, so a voice downloaded
+# from the catalog used to arrive in the library stripped of everything the
+# catalog knew about it — including its face. This records that at install time.
+#
+# Guessing instead was the tempting shortcut and the wrong one: it would mean
+# looking up "zub" on Wikipedia, and a voice the user trained from their own
+# singing is nobody's business but theirs.
+# ---------------------------------------------------------------------------
+def load_origins() -> dict:
+    try:
+        return json.loads(ORIGINS_PATH.read_text("utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {}
+
+
+def _save_origins(data: dict) -> None:
+    ORIGINS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".origins_", suffix=".json",
+                               dir=str(ORIGINS_PATH.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp, ORIGINS_PATH)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+
+
+def record_origin(name: str, **fields) -> None:
+    """Remember where an installed voice came from."""
+    data = load_origins()
+    data[name] = {k: v for k, v in fields.items() if v not in (None, "")}
+    try:
+        _save_origins(data)
+    except OSError:
+        pass
+
+
+def rename_origin(old: str, new: str) -> None:
+    data = load_origins()
+    if old in data:
+        data[new] = data.pop(old)
+        try:
+            _save_origins(data)
+        except OSError:
+            pass
+
+
+def forget_origin(name: str) -> None:
+    data = load_origins()
+    if data.pop(name, None) is not None:
+        try:
+            _save_origins(data)
+        except OSError:
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -190,6 +251,7 @@ def usage_counts() -> dict[str, int]:
 def list_voices() -> list[dict]:
     """Full records for every installed model."""
     counts = usage_counts()
+    origins = load_origins()
     out = []
 
     for name in engine.list_voice_models():
@@ -202,6 +264,8 @@ def list_voices() -> list[dict]:
         idx = _index_files_for(name)
         idx_size = sum(p.stat().st_size for p in idx if p.exists())
         info = probe(pth)
+
+        origin = origins.get(name) or {}
 
         out.append({
             "name": name,
@@ -216,6 +280,14 @@ def list_voices() -> list[dict]:
             "hasPreview": has_preview(name),
             "pthPath": str(pth),
             "usedByCovers": counts.get(name, 0),
+            # Where it came from, when it came from the catalog. A voice trained
+            # here has none of this, which is exactly the point.
+            "sourceUrl": origin.get("sourceUrl", ""),
+            "repoId": origin.get("repoId", ""),
+            "category": origin.get("category", ""),
+            "gender": origin.get("gender", ""),
+            "hasPortrait": bool(origin.get("portraitName")),
+            "portraitName": origin.get("portraitName", ""),
         })
 
     return out

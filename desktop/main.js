@@ -461,6 +461,7 @@ function buildMenu() {
       label: "File",
       submenu: [
         { label: "New cover", accelerator: "CmdOrCtrl+N", click: () => send("new-cover") },
+        { label: "Batch", accelerator: "CmdOrCtrl+Shift+B", click: () => send("batch") },
         { label: "Speak", accelerator: "CmdOrCtrl+Shift+S", click: () => send("speak") },
         { label: "Train a voice", accelerator: "CmdOrCtrl+Shift+T", click: () => send("train") },
         { label: "Import voice…", click: () => send("import-voice") },
@@ -556,6 +557,23 @@ ipcMain.handle("vocalis:pickVoiceIndex", async () => {
     title: "Choose the matching RVC index",
     properties: ["openFile"],
     filters: [{ name: "RVC feature index", extensions: ["index"] }],
+  });
+  return res.canceled ? "" : res.filePaths[0];
+});
+
+/**
+ * One open dialog for the app's own document types — projects and voice packs.
+ * A filter list rather than another named handler per format, because the two
+ * differ only in the extension and the title on the dialog.
+ */
+ipcMain.handle("vocalis:pickFile", async (_evt, opts) => {
+  const { title, extensions, name } = opts || {};
+  const res = await dialog.showOpenDialog(mainWindow, {
+    title: title || "Open",
+    properties: ["openFile"],
+    filters: extensions && extensions.length
+      ? [{ name: name || "File", extensions }]
+      : undefined,
   });
   return res.canceled ? "" : res.filePaths[0];
 });

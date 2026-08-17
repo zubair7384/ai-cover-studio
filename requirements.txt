@@ -8,5 +8,6 @@ gradio
 rvc-python
 audio-separator[cpu]        # use audio-separator[gpu] on NVIDIA machines
 pedalboard
+librosa                     # key detection + vocal range analysis
 pydub
 yt-dlp                      # "paste a link" input; keep it updated

@@ -56,6 +56,12 @@ const state = {
   // Settings carried from a cover's detail sheet into New cover.
   coverDraft: null,
 
+  // Voices: "local" (on this Mac) or "online" (the Hugging Face catalog).
+  voicesTab: persisted("voicesTab", "local"),
+  // Starred online voices, by catalog id. Kept here rather than on the server
+  // because a favourite is a note about taste, not a fact about the machine.
+  favoriteVoices: persisted("favoriteVoices", []),
+
   // long-running jobs (Prompt 4/5 populate this; the sidebar reads it)
   jobs: [],                 // [{ id, kind, name, progress, stage }]
 
@@ -127,4 +133,19 @@ export function setInspectorVisible(visible) {
 export function setProfile(profile) {
   persist("profile", profile);
   set({ profile });
+}
+
+export function setVoicesTab(tab) {
+  persist("voicesTab", tab);
+  set({ voicesTab: tab });
+}
+
+/** Star or unstar an online voice. Returns the new state for that voice. */
+export function toggleFavoriteVoice(id) {
+  const current = state.favoriteVoices || [];
+  const on = !current.includes(id);
+  const next = on ? [...current, id] : current.filter((x) => x !== id);
+  persist("favoriteVoices", next);
+  set({ favoriteVoices: next });
+  return on;
 }

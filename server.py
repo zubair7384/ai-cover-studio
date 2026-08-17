@@ -9,7 +9,16 @@ Endpoints
     GET  /api/health                 → readiness + hardware summary
     GET  /api/models                 → list installed voice models
     POST /api/models/import          → copy .pth/.index files (by local path)
+    GET  /api/hf/voices              → browse RVC voices published on Hugging Face
+    POST /api/hf/download            → install one of them → {job_id}
     POST /api/convert                → start a cover job  → {job_id}
+    POST /api/batch                  → queue many songs through one voice → {job_id}
+    POST /api/analyse                → key, vocal range, suggested pitch shift
+    POST /api/karaoke                → export a cover's backing track → {job_id}
+    POST /api/covers/stems/export    → write a cover's stems to a folder → {job_id}
+    POST /api/projects/save|open     → .vocalis project documents
+    GET  /api/packs                  → installed voice packs
+    POST /api/packs/inspect|install|export|forget
     POST /api/train                  → start a training job → {job_id}
     GET  /api/jobs/{id}/events        → SSE: progress / log / done / error
     GET  /api/outputs/{name}          → download/stream a finished cover
@@ -38,8 +47,12 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 
+import analysis
 import engine
 import covers_manifest
+import hf_voices
+import packs
+import projects
 import voices_manifest
 
 app = FastAPI(title="AI Cover Studio")
@@ -230,6 +243,12 @@ def rename_model(payload: dict) -> dict:
     src.rename(dst)
     for idx in _index_files_for(old):
         idx.rename(engine.MODELS_DIR / (new + idx.name[len(old):]))
+    # Provenance follows the name, or a renamed voice loses its face.
+    voices_manifest.rename_origin(old, new)
+    # The measured range does not follow it: the profile is keyed by name and
+    # re-measuring costs seconds, where a stale entry would silently mis-suggest
+    # a pitch shift for whatever voice next takes the old name.
+    analysis.forget_voice_profile(old)
     return {"name": new, "models": engine.list_voice_models()}
 
 
@@ -249,7 +268,82 @@ def delete_model(payload: dict) -> dict:
     # Take the preview clip with it, or a re-imported model of the same name
     # would inherit the old voice's sample.
     voices_manifest.delete_preview(name)
+    voices_manifest.forget_origin(name)
+    analysis.forget_voice_profile(name)
     return {"deleted": name, "models": engine.list_voice_models()}
+
+
+# ---------------------------------------------------------------------------
+# Online voice catalog (Hugging Face)
+#
+# Browsing is a plain GET because it is cheap and cached; installing is a job
+# because it moves tens or hundreds of megabytes and the user deserves a
+# progress bar and a Cancel, exactly like a cover render.
+# ---------------------------------------------------------------------------
+@app.get("/api/hf/voices")
+def hf_voices_list(query: str = "", category: str = "", gender: str = "",
+                   sort: str = "popular", page: int = 1,
+                   page_size: int = 30) -> dict:
+    try:
+        return hf_voices.catalog(query=query, category=category, gender=gender,
+                                 sort=sort, page=page, page_size=page_size)
+    except RuntimeError as exc:
+        # Offline, or the Hub is rate limiting. Either way it is a temporary
+        # condition the user can act on, not a 500.
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/api/hf/portrait")
+def hf_portrait(name: str) -> FileResponse:
+    """
+    A celebrity voice's portrait, fetched from Wikimedia Commons once and then
+    served from disk.
+
+    The renderer never reaches Wikimedia itself — the app's CSP forbids remote
+    images, and routing through here means a portrait is downloaded a single
+    time and works offline afterwards. A 404 is an ordinary outcome: the card
+    simply keeps the tile it already drew.
+    """
+    path = hf_voices.fetch_portrait(str(name or ""))
+    if not path:
+        raise HTTPException(status_code=404, detail="No portrait for that voice.")
+    return FileResponse(str(path), media_type="image/jpeg")
+
+
+@app.get("/api/hf/portrait-credit")
+def hf_portrait_credit(name: str) -> dict:
+    """Attribution for a portrait already fetched. Cache-only, never blocks."""
+    return hf_voices.portrait_credit(str(name or ""))
+
+
+@app.post("/api/hf/refresh")
+def hf_voices_refresh() -> dict:
+    """Read the catalog again from the Hub, keeping per-commit caches."""
+    hf_voices.refresh_catalog()
+    return hf_voices.catalog(page_size=1)
+
+
+@app.post("/api/hf/download")
+def hf_voices_download(payload: dict) -> dict:
+    """Install one online voice into voice_models/. Returns a job id."""
+    repo_id = str(payload.get("repo_id", "") or "")
+    pth_path = str(payload.get("pth_path", "") or "")
+    if not repo_id or not pth_path:
+        raise HTTPException(status_code=400, detail="Choose a voice to download.")
+
+    name = engine.safe_model_name(str(payload.get("name", "") or ""))
+    if (engine.MODELS_DIR / f"{name}.pth").exists():
+        raise HTTPException(status_code=409,
+                            detail=f"A voice named '{name}' is already installed.")
+
+    job = Job()
+    JOBS[job.id] = job
+    _start(job, hf_voices.install, repo_id, pth_path,
+           str(payload.get("index_path", "") or ""), name,
+           str(payload.get("category", "") or ""),
+           str(payload.get("gender", "") or ""),
+           str(payload.get("portrait_name", "") or ""))
+    return {"job_id": job.id}
 
 
 @app.get("/api/models/file/{name}")
@@ -381,8 +475,31 @@ def convert(payload: dict) -> dict:
            float(payload.get("vocal_gain_db", 0.0) or 0.0),
            source_file_name=Path(song_path).name,
            output_format=str(payload.get("output_format", "mp3") or "mp3"),
-           trim_start=trim_start, trim_end=trim_end)
+           trim_start=trim_start, trim_end=trim_end,
+           **_harmony_kwargs(payload))
     return {"job_id": job.id}
+
+
+def _harmony_kwargs(payload: dict) -> dict:
+    """
+    The extra-vocal settings, clamped, from either a convert or a batch payload.
+
+    Shared rather than duplicated because a batch run has to produce byte-for-
+    byte the same arrangement as the single run the user auditioned first.
+    """
+    gain = payload.get("harmony_gain_db")
+    try:
+        gain = float(gain) if gain is not None else engine.HARMONY_GAIN_DB
+    except (TypeError, ValueError):
+        gain = engine.HARMONY_GAIN_DB
+
+    return {
+        "harmony_preset": str(payload.get("harmony_preset", "none") or "none"),
+        "harmony_intervals_custom": payload.get("harmony_intervals") or None,
+        "harmony_gain_db": max(engine.HARMONY_MIN_GAIN_DB,
+                               min(engine.HARMONY_MAX_GAIN_DB, gain)),
+        "double_track": bool(payload.get("double_track")),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -686,6 +803,369 @@ def train(payload: dict) -> dict:
 
     threading.Thread(target=run_and_release, daemon=True).start()
     return {"job_id": job.id}
+
+
+# ---------------------------------------------------------------------------
+# Batch — many songs, one voice, one queue
+#
+# The machine can only run one cover at a time: separation and conversion both
+# want the whole GPU (or the whole CPU), so running two at once makes both
+# slower and neither finish sooner. A batch is therefore a queue, not a fan-out.
+#
+# It is one job with one event stream rather than N jobs, because that is how it
+# is used: start ten songs, close the laptop lid, come back to ten covers. A
+# failure on song 4 must not stop songs 5 through 10 — each item's outcome is
+# recorded and the queue moves on.
+# ---------------------------------------------------------------------------
+MAX_BATCH_ITEMS = 50
+
+
+def _run_batch(job: Job, items: list[dict], model_name: str,
+               settings: dict) -> None:
+    """Work the queue, reporting per-item state as well as overall progress."""
+    state = [{"index": i, "name": item.get("name") or Path(item["path"]).name,
+              "path": item["path"], "status": "queued", "coverId": None,
+              "outputPath": None, "error": None}
+             for i, item in enumerate(items)]
+
+    def publish(note: str = "") -> None:
+        done = sum(1 for s in state if s["status"] in {"done", "failed", "skipped"})
+        job.put({
+            "type": "batch",
+            "items": state,
+            "completed": done,
+            "total": len(state),
+            "note": note,
+        })
+
+    try:
+        publish("Queued.")
+        for i, item in enumerate(state):
+            if job.cancelled:
+                for remaining in state[i:]:
+                    if remaining["status"] == "queued":
+                        remaining["status"] = "skipped"
+                publish("Cancelled — the rest of the queue was skipped.")
+                job.put({"type": "cancelled"})
+                return
+
+            item["status"] = "running"
+            publish(f"{item['name']} — song {i + 1} of {len(state)}")
+
+            def progress_cb(frac: float, step: str, note: str = "",
+                            _index: int = i) -> None:
+                if job.cancelled:
+                    raise JobCancelled()
+                # Overall progress is the queue's, not the song's: a bar that
+                # restarted at every track would say nothing about the wait.
+                overall = (_index + max(0.0, min(1.0, frac))) / len(state)
+                job.put({"type": "progress", "fraction": round(overall, 4),
+                         "step": step, "note": note, "item": _index})
+
+            try:
+                path = engine.generate_cover(
+                    model_name, item["path"],
+                    progress_cb=progress_cb,
+                    log_cb=lambda line: job.put({"type": "log", "line": line}),
+                    source_file_name=Path(item["path"]).name,
+                    title=str(items[i].get("title") or ""),
+                    **settings)
+                item["status"] = "done"
+                item["outputPath"] = str(path)
+                item["coverId"] = Path(path).name
+            except JobCancelled:
+                # The song under way when Cancel was pressed is not a failure.
+                item["status"] = "skipped"
+                for remaining in state[i + 1:]:
+                    remaining["status"] = "skipped"
+                publish("Cancelled.")
+                job.put({"type": "cancelled"})
+                return
+            except Exception as exc:  # noqa: BLE001 — reported per item
+                engine.log.exception("Batch item %s failed", item["name"])
+                item["status"] = "failed"
+                item["error"] = str(exc)
+
+            publish()
+
+        done = [s for s in state if s["status"] == "done"]
+        failed = [s for s in state if s["status"] == "failed"]
+        job.result = {
+            "completed": len(done),
+            "failed": len(failed),
+            "total": len(state),
+            "items": state,
+        }
+        job.put({"type": "done", "result": job.result})
+    except Exception as exc:  # noqa: BLE001 — the queue itself broke
+        engine.log.exception("Batch %s failed", job.id)
+        job.error = str(exc)
+        job.put({"type": "error", "message": str(exc),
+                 "detail": traceback.format_exc()})
+    finally:
+        job.done = True
+        job.put({"type": "_eof"})
+
+
+@app.post("/api/batch")
+def batch(payload: dict) -> dict:
+    """
+    Queue several songs through one voice with one set of settings.
+
+    Trimming is deliberately not offered here: a trim is a decision about one
+    particular song, and the same in-and-out points applied to ten different
+    tracks would be wrong nine times.
+    """
+    model_name = str(payload.get("model_name", ""))
+    if not model_name:
+        raise HTTPException(status_code=400, detail="Choose a voice first.")
+    if model_name not in engine.list_voice_models():
+        raise HTTPException(status_code=404, detail="That voice isn't installed.")
+
+    raw_items = payload.get("items") or []
+    if not isinstance(raw_items, list) or not raw_items:
+        raise HTTPException(status_code=400, detail="Add at least one song.")
+    if len(raw_items) > MAX_BATCH_ITEMS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"A batch takes up to {MAX_BATCH_ITEMS} songs at a time.")
+
+    items = []
+    for raw in raw_items:
+        path = str((raw or {}).get("path") or "")
+        if not path or not Path(path).is_file():
+            raise HTTPException(
+                status_code=400,
+                detail=f"'{Path(path).name or 'A song in the list'}' is no longer there.")
+        items.append({"path": path,
+                      "name": str((raw or {}).get("name") or Path(path).name),
+                      "title": str((raw or {}).get("title") or "")})
+
+    settings = {
+        "pitch_shift": int(payload.get("pitch_shift", 0) or 0),
+        "index_rate": float(payload.get("index_rate", 0.75) or 0.75),
+        "vocal_gain_db": float(payload.get("vocal_gain_db", 0.0) or 0.0),
+        "output_format": str(payload.get("output_format", "mp3") or "mp3"),
+        "speed": float(payload.get("speed", 1.0) or 1.0),
+        **_harmony_kwargs(payload),
+    }
+
+    job = Job()
+    JOBS[job.id] = job
+    threading.Thread(target=_run_batch, args=(job, items, model_name, settings),
+                     daemon=True).start()
+    return {"job_id": job.id, "total": len(items)}
+
+
+# ---------------------------------------------------------------------------
+# Analysis — key, and the pitch shift that follows from it
+# ---------------------------------------------------------------------------
+@app.post("/api/analyse")
+def analyse(payload: dict) -> dict:
+    """
+    Measure a song, and suggest a pitch shift for a voice if one was named.
+
+    Synchronous rather than a job: it is a couple of seconds on a cached read
+    and the view that asks for it is waiting on the answer to draw a control.
+    """
+    song_path = str(payload.get("song_path", ""))
+    if not song_path or not Path(song_path).is_file():
+        raise HTTPException(status_code=400, detail="That song file no longer exists.")
+
+    trim_start = payload.get("trim_start")
+    trim_end = payload.get("trim_end")
+    model_name = str(payload.get("model_name", "") or "")
+
+    try:
+        if model_name:
+            return analysis.suggest_pitch_shift(song_path, model_name,
+                                                trim_start, trim_end)
+        return {"song": analysis.analyse_song(song_path, trim_start, trim_end),
+                "semitones": 0, "confidence": "none", "voice": {},
+                "reason": "Choose a voice to get a suggested shift."}
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+    except Exception as err:  # noqa: BLE001 — analysis must never take a run down
+        engine.log.exception("Analysis failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Couldn't analyse that song: {err}")
+
+
+@app.get("/api/voices/{name}/profile")
+def voice_range(name: str) -> dict:
+    """Where one voice sits, for the Voices list."""
+    return analysis.voice_profile(Path(name).name)
+
+
+@app.post("/api/voices/profile")
+def set_voice_range(payload: dict) -> dict:
+    """
+    Record the range of a voice the app cannot measure.
+
+    Most installed voices are downloaded `.pth` files with no audio attached,
+    so there is nothing to analyse and the pitch suggestion has nothing to work
+    from. One choice from a dropdown is enough to make it useful.
+    """
+    name = Path(str(payload.get("name", ""))).name
+    if not name or name not in engine.list_voice_models():
+        raise HTTPException(status_code=404, detail="That voice isn't installed.")
+
+    if payload.get("clear"):
+        analysis.forget_voice_profile(name)
+        return analysis.voice_profile(name)
+
+    try:
+        return analysis.set_manual_profile(
+            name,
+            range_key=str(payload.get("range", "")),
+            median_f0=payload.get("median_f0"))
+    except (TypeError, ValueError) as err:
+        raise HTTPException(status_code=400, detail=str(err))
+
+
+@app.get("/api/voices/ranges")
+def voice_range_choices() -> dict:
+    """The ranges the UI offers, named and in order."""
+    return {"ranges": [{"key": k, "hz": hz, "note": analysis.hz_to_note(hz)}
+                       for k, hz in analysis.MANUAL_RANGES.items()]}
+
+
+# ---------------------------------------------------------------------------
+# Karaoke and stem export
+# ---------------------------------------------------------------------------
+@app.get("/api/covers/{cover_id}/stem-list")
+def cover_stem_list(cover_id: str) -> dict:
+    """Which of a cover's separated parts survive on disk."""
+    return {"stems": engine.available_stems(Path(cover_id).name)}
+
+
+@app.post("/api/karaoke")
+def karaoke(payload: dict) -> dict:
+    """Export a cover's backing track as its own item in the library."""
+    cover_id = Path(str(payload.get("id", ""))).name
+    if not cover_id:
+        raise HTTPException(status_code=400, detail="Which cover?")
+
+    job = Job()
+    JOBS[job.id] = job
+    _start(job, engine.export_karaoke, cover_id,
+           str(payload.get("output_format", "mp3") or "mp3"))
+    return {"job_id": job.id}
+
+
+@app.post("/api/covers/stems/export")
+def export_cover_stems(payload: dict) -> dict:
+    """Write a cover's separated parts into a folder the user picked."""
+    cover_id = Path(str(payload.get("id", ""))).name
+    dest = str(payload.get("dest_dir", ""))
+    if not cover_id:
+        raise HTTPException(status_code=400, detail="Which cover?")
+    if not dest:
+        raise HTTPException(status_code=400, detail="Choose a folder first.")
+
+    job = Job()
+    JOBS[job.id] = job
+    _start(job, engine.export_stems, cover_id, dest,
+           payload.get("keys") or None,
+           str(payload.get("output_format", "wav") or "wav"))
+    return {"job_id": job.id}
+
+
+# ---------------------------------------------------------------------------
+# Project documents
+# ---------------------------------------------------------------------------
+@app.post("/api/projects/save")
+def save_project(payload: dict) -> dict:
+    """Write the current New cover state to a .vocalis file."""
+    path = str(payload.get("path", ""))
+    if not path:
+        raise HTTPException(status_code=400, detail="Choose where to save it.")
+
+    try:
+        if payload.get("cover_id"):
+            document = projects.from_cover(Path(str(payload["cover_id"])).name)
+        else:
+            document = projects.build(
+                title=str(payload.get("title", "")),
+                song_path=str(payload.get("song_path", "")),
+                song_name=str(payload.get("song_name", "")),
+                source_url=str(payload.get("source_url", "")),
+                voice_id=str(payload.get("voice_id", "")),
+                params=payload.get("params") or {},
+                trim=payload.get("trim") or None,
+                notes=str(payload.get("notes", "")),
+            )
+        return projects.save(path, document)
+    except projects.ProjectError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+
+
+@app.post("/api/projects/open")
+def open_project(payload: dict) -> dict:
+    """Read a .vocalis file back, reporting anything it refers to that is gone."""
+    path = str(payload.get("path", ""))
+    if not path:
+        raise HTTPException(status_code=400, detail="Which project?")
+    try:
+        return projects.open_project(path)
+    except projects.ProjectError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+
+
+# ---------------------------------------------------------------------------
+# Voice packs
+# ---------------------------------------------------------------------------
+@app.get("/api/packs")
+def installed_packs() -> dict:
+    return {"packs": packs.list_installed()}
+
+
+@app.post("/api/packs/inspect")
+def inspect_pack(payload: dict) -> dict:
+    """Describe a pack file without installing anything from it."""
+    try:
+        return packs.inspect(str(payload.get("path", "")))
+    except packs.PackError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+
+
+@app.post("/api/packs/install")
+def install_pack(payload: dict) -> dict:
+    """Install a pack. A job — several voices can be hundreds of megabytes."""
+    path = str(payload.get("path", ""))
+    if not path:
+        raise HTTPException(status_code=400, detail="Choose a pack file.")
+
+    job = Job()
+    JOBS[job.id] = job
+    _start(job, packs.install, path, overwrite=bool(payload.get("overwrite")))
+    return {"job_id": job.id}
+
+
+@app.post("/api/packs/export")
+def export_pack(payload: dict) -> dict:
+    """Build a pack out of installed voices."""
+    dest = str(payload.get("path", ""))
+    if not dest:
+        raise HTTPException(status_code=400, detail="Choose where to save it.")
+
+    job = Job()
+    JOBS[job.id] = job
+    _start(job, packs.export, payload.get("names") or [], dest,
+           name=str(payload.get("name", "")),
+           author=str(payload.get("author", "")),
+           description=str(payload.get("description", "")),
+           licence=str(payload.get("licence", "unspecified")))
+    return {"job_id": job.id}
+
+
+@app.post("/api/packs/forget")
+def forget_pack(payload: dict) -> dict:
+    try:
+        return packs.forget(str(payload.get("id", "")))
+    except packs.PackError as err:
+        raise HTTPException(status_code=404, detail=str(err))
 
 
 # ---------------------------------------------------------------------------

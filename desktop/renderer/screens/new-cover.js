@@ -16,7 +16,7 @@
 import { el, cls, on } from "../lib/dom.js";
 import { icon as makeIcon } from "../lib/icons.js";
 import {
-  Badge, Button, IconButton, Popover, Select, Slider, Segmented,
+  Badge, Button, IconButton, Menu, Popover, Select, Slider, Segmented, Toggle,
 } from "../components/primitives/index.js";
 import { Waveform, Pipeline, COVER_STAGES } from "../components/meter/index.js";
 import { MeterBar } from "../components/meter/meter-bar.js";
@@ -35,6 +35,28 @@ const DEFAULTS = {
   indexStrength: 0.75,
   outputFormat: "mp3",
   vocalGain: 0,
+  harmonyPreset: "none",
+  harmonyGainDb: -9,
+  doubleTrack: false,
+};
+
+// Mirrors engine.HARMONY_PRESETS. Named by what they sound like rather than by
+// their intervals: "a third above" is what a singer asks for, +4 is what the
+// model is told.
+const HARMONIES = [
+  { value: "none", label: "None" },
+  { value: "third-up", label: "A third above" },
+  { value: "third-down", label: "A third below" },
+  { value: "thirds", label: "Thirds, both sides" },
+  { value: "fifth-up", label: "A fifth above" },
+  { value: "octave-down", label: "An octave below" },
+  { value: "choir", label: "Choir (four parts)" },
+];
+
+// How many extra conversion passes each preset costs, for the warning line.
+const HARMONY_COST = {
+  none: 0, "third-up": 1, "third-down": 1, thirds: 2,
+  "fifth-up": 1, "octave-down": 1, choir: 4,
 };
 
 const FORMATS = [
@@ -67,6 +89,9 @@ export function NewCoverFlow() {
   let trimOpen = false;
   let sourcePeaks = null;   // { peaks, duration } for the chosen song
   let sourceBlobUrl = null; // decoded once, for trim preview playback
+  let reading = null;       // { semitones, confidence, reason, song, voice }
+  let readingToken = 0;     // guards against a stale analysis landing last
+  let projectPath = null;   // the .vocalis file this draft came from, if any
 
   const voices = () => getState().voices;
   const currentVoice = () => voices().find((v) => v.name === voiceId) || null;
@@ -90,10 +115,43 @@ export function NewCoverFlow() {
     trim = null;
     trimOpen = false;
     sourcePeaks = null;
+    reading = null;
     if (sourceBlobUrl) { URL.revokeObjectURL(sourceBlobUrl); sourceBlobUrl = null; }
     paintSong();
     paintGenerate();
-    if (song) loadSourcePeaks(song.path);
+    paintSuggestion();
+    if (song) {
+      loadSourcePeaks(song.path);
+      analyse();
+    }
+  }
+
+  /* Analysis — the song's key, and the shift that puts it in the voice's range.
+   *
+   * Asked for as soon as there is a song, rather than behind a button: the two
+   * things it answers ("what key is this" and "how far should I move it") are
+   * both wanted before the run, and the result is cached on the server, so the
+   * only cost of doing it eagerly is the first few seconds after a file lands.
+   */
+  async function analyse() {
+    if (!song) return;
+    const token = ++readingToken;
+    paintSuggestion({ busy: true });
+    try {
+      const result = await api.analyse({
+        songPath: song.path, voiceId: voiceId || "", trim: effectiveTrim(),
+      });
+      if (token !== readingToken) return;      // a later request won
+      reading = result;
+    } catch (err) {
+      if (token !== readingToken) return;
+      // A failed analysis costs the hint and nothing else, so it is reported
+      // where the hint would have been rather than as a run-stopping error.
+      reading = { semitones: 0, confidence: "none", reason: err.message,
+                  song: null, voice: null };
+    }
+    paintSong();
+    paintSuggestion();
   }
 
   /**
@@ -254,7 +312,11 @@ export function NewCoverFlow() {
           [song.durationSec ? fmt.duration(song.durationSec) : null,
            song.sampleRate ? `${Math.round(song.sampleRate / 1000)} kHz` : null,
            song.sourceUrl ? sourceHost(song.sourceUrl) : null,
-           cut ? `trimmed to ${fmt.duration(cut.end - cut.start)}` : null]
+           cut ? `trimmed to ${fmt.duration(cut.end - cut.start)}` : null,
+           // Estimated, and labelled as such — a template key detector is right
+           // most of the time and confidently wrong the rest, so it offers its
+           // second choice rather than pretending to certainty.
+           reading?.song?.key ? `${reading.song.key} (est.)` : null]
             .filter(Boolean).join(" · ") || "Ready"),
       ),
       // Only offered once the shape is known — a trim view with no waveform
@@ -299,6 +361,7 @@ export function NewCoverFlow() {
         preview?.pause();
         paintSong();
         paintGenerate();
+        analyse();
       },
     });
     const paintReadout = () => {
@@ -321,6 +384,9 @@ export function NewCoverFlow() {
       onSelectEnd: () => {
         trim = { start: range.start, end: range.end };
         paintGenerate();
+        // A different span of the song can be in a different key and a
+        // different register, so the reading is redone rather than carried over.
+        analyse();
         resetBtn.disabled = !effectiveTrim();
         // The collapsed row's summary is now stale, but repainting the whole
         // section would tear down this panel mid-interaction.
@@ -402,7 +468,15 @@ export function NewCoverFlow() {
       const row = el("button", {
         type: "button",
         class: cls("voicepick__row", v.name === voiceId && "voicepick__row--on"),
-        onclick: () => { voiceId = v.name; paintVoice(); paintGenerate(); pop.close(); },
+        onclick: () => {
+          voiceId = v.name;
+          paintVoice();
+          paintGenerate();
+          // The suggested shift is the interval between this song and this
+          // voice, so changing either one invalidates it.
+          analyse();
+          pop.close();
+        },
       },
         el("span", { class: "voice-tile voice-tile--sm" }, initials(v.name)),
         el("span", { class: "voicepick__name" }, v.name),
@@ -760,8 +834,58 @@ export function NewCoverFlow() {
     format: (v) => `${v > 0 ? "+" : ""}${v} st`,
     ticks: [{ label: "−12" }, { label: "0" }, { label: "+12" }],
     help: "+12 to sing a man's part in a woman's voice; −12 for the reverse.",
-    onInput: (v) => { params.pitchShift = v; },
+    onInput: (v) => { params.pitchShift = v; paintSuggestion(); },
   });
+
+  /* Suggested shift.
+   *
+   * Sits under the pitch slider as an offer, never as an override: the number
+   * is an estimate off two measurements, and a singer who knows the song is
+   * better informed than the estimate. Applying it is one click; ignoring it
+   * costs nothing.
+   */
+  const suggestBtn = Button({
+    label: "Use suggestion", variant: "tertiary", size: "sm",
+    onClick: () => {
+      if (!reading || reading.confidence === "none") return;
+      params.pitchShift = reading.semitones;
+      pitch.setValue(reading.semitones);
+      paintSuggestion();
+    },
+  });
+  const suggestNote = el("div", { class: "field__help suggest__note" }, "");
+  const suggestRow = el("div", { class: "suggest" }, suggestNote, suggestBtn);
+
+  const CONFIDENCE_LABEL = {
+    high: "Measured", medium: "Estimated", low: "Rough guess",
+  };
+
+  function paintSuggestion({ busy = false } = {}) {
+    if (!song) {
+      suggestRow.hidden = true;
+      return;
+    }
+    suggestRow.hidden = false;
+
+    if (busy) {
+      suggestNote.textContent = "Listening to the song…";
+      suggestBtn.hidden = true;
+      return;
+    }
+    if (!reading) {
+      suggestNote.textContent = "";
+      suggestBtn.hidden = true;
+      return;
+    }
+
+    const usable = reading.confidence !== "none";
+    suggestBtn.hidden = !usable || params.pitchShift === reading.semitones;
+    const label = CONFIDENCE_LABEL[reading.confidence];
+    const sign = reading.semitones > 0 ? "+" : "";
+    suggestNote.textContent = usable
+      ? `${label}: ${sign}${reading.semitones} st. ${reading.reason}`
+      : reading.reason;
+  }
 
   const character = Slider({
     label: "Voice character",
@@ -791,6 +915,49 @@ export function NewCoverFlow() {
     onInput: (v) => { params.vocalGain = v; },
   });
 
+  /* ---- extra vocal takes ------------------------------------------------ */
+  // Each one is another pass over the model, so the cost is stated here rather
+  // than discovered when a two-minute run turns into a six-minute one.
+
+  const harmony = Select({
+    label: "Harmony",
+    options: HARMONIES,
+    value: params.harmonyPreset,
+    onChange: (v) => { params.harmonyPreset = v; paintTakes(); },
+  });
+
+  const harmonyGain = Slider({
+    label: "Harmony level",
+    min: -24, max: -3, step: 1, value: params.harmonyGainDb,
+    format: (v) => `${v} dB`,
+    help: "How far under the lead the harmony sits.",
+    onInput: (v) => { params.harmonyGainDb = v; },
+  });
+
+  const doubler = Toggle({
+    label: "Double the lead",
+    checked: params.doubleTrack,
+    onChange: (on) => { params.doubleTrack = on; paintTakes(); },
+  });
+
+  const takesNote = el("div", { class: "field__help" }, "");
+
+  function paintTakes() {
+    const extra = (HARMONY_COST[params.harmonyPreset] || 0)
+      + (params.doubleTrack ? 1 : 0);
+    harmonyGain.hidden = params.harmonyPreset === "none";
+    takesNote.textContent = extra
+      ? `${extra + 1} vocal takes in total — about ${extra + 1}× the voice `
+        + "conversion time. Separation still happens once."
+      : "One vocal take.";
+  }
+  paintTakes();
+
+  const takes = el("details", { class: "inspector__advanced" },
+    el("summary", { class: "t-body-em" }, "Harmony & doubling"),
+    harmony, harmonyGain, doubler, takesNote,
+  );
+
   const advanced = el("details", { class: "inspector__advanced" },
     el("summary", { class: "t-body-em" }, "Advanced"),
     gain,
@@ -798,7 +965,10 @@ export function NewCoverFlow() {
 
   const inspector = el("aside", { class: "inspector", "aria-label": "Parameters" },
     el("div", { class: "inspector__body" },
-      pitch, character, indexStrength, format, advanced,
+      // Grouped so the inspector's own gap separates "pitch and its suggestion"
+      // from the next control, rather than separating the two from each other.
+      el("div", { class: "pitchgroup" }, pitch, suggestRow),
+      character, indexStrength, format, takes, advanced,
       Button({
         label: "Reset to defaults", variant: "tertiary", size: "sm",
         onClick: () => {
@@ -807,7 +977,12 @@ export function NewCoverFlow() {
           character.setValue(DEFAULTS.voiceCharacter);
           indexStrength.setValue(DEFAULTS.indexStrength);
           gain.setValue(DEFAULTS.vocalGain);
+          harmonyGain.setValue(DEFAULTS.harmonyGainDb);
           format.input.value = DEFAULTS.outputFormat;
+          harmony.input.value = DEFAULTS.harmonyPreset;
+          doubler.input.checked = DEFAULTS.doubleTrack;
+          paintTakes();
+          paintSuggestion();
         },
       }),
     ),
@@ -833,6 +1008,119 @@ export function NewCoverFlow() {
   const generateBtn = Button({
     label: "Generate", variant: "primary",
     onClick: () => startRun(),
+  });
+
+  /* ---- project documents ------------------------------------------------ */
+  // A cover is a set of decisions about a song, and decisions are worth keeping
+  // whether or not the render was any good. The document holds no audio: it
+  // points at the song and names the voice, so it is a few hundred bytes and
+  // survives being emailed to someone who has the same voice installed.
+
+  async function saveProject({ reuse = false } = {}) {
+    const suggested = (song?.name || "cover").replace(/\.[^.]+$/, "");
+    // Saving over the file this draft was opened from is the common case once
+    // a project exists, so it does not re-ask where to put it.
+    const path = reuse && projectPath
+      ? projectPath
+      : await window.vocalis.savePath({
+          title: "Save project",
+          defaultName: `${suggested}.vocalis`,
+          extensions: ["vocalis"],
+        });
+    if (!path) return;
+
+    try {
+      const saved = await api.saveProject({
+        path,
+        title: projectPath && reuse
+          ? projectPath.split("/").pop().replace(/\.vocalis$/, "")
+          : suggested,
+        song_path: song?.path || "",
+        song_name: song?.name || "",
+        source_url: song?.sourceUrl || "",
+        voice_id: voiceId || "",
+        params,
+        trim: effectiveTrim(),
+      });
+      projectPath = saved.path;
+      toast({ message: `Saved ${saved.path.split("/").pop()}` });
+    } catch (err) {
+      toast({ message: err.message });
+    }
+  }
+
+  async function openProject() {
+    const path = await window.vocalis.pickFile({
+      title: "Open project",
+      name: "Vocalis project",
+      extensions: ["vocalis"],
+    });
+    if (!path) return;
+
+    let doc;
+    try {
+      doc = await api.openProject(path);
+    } catch (err) {
+      return toast({ message: err.message });
+    }
+
+    projectPath = doc.path;
+    Object.assign(params, doc.params);
+    pitch.setValue(params.pitchShift);
+    character.setValue(params.voiceCharacter);
+    indexStrength.setValue(params.indexStrength);
+    gain.setValue(params.vocalGain);
+    harmonyGain.setValue(params.harmonyGainDb);
+    format.input.value = params.outputFormat;
+    harmony.input.value = params.harmonyPreset;
+    doubler.input.checked = params.doubleTrack;
+    paintTakes();
+
+    // A project that travelled may name a voice this Mac doesn't have, or a
+    // song that moved. Both are loaded as far as they go and reported plainly
+    // rather than silently substituted.
+    voiceId = doc.voice.available ? doc.voice.id : null;
+    if (doc.song.available) {
+      setSong({ path: doc.song.path, name: doc.song.name,
+                sourceUrl: doc.song.sourceUrl || "" });
+      if (doc.trim) trim = { start: doc.trim.start, end: doc.trim.end };
+    } else {
+      setSong(null);
+      if (doc.song.sourceUrl) linkInput.value = doc.song.sourceUrl;
+    }
+
+    paintVoice();
+    paintGenerate();
+    paintSuggestion();
+
+    if (doc.missing.length) {
+      const parts = [];
+      if (doc.missing.includes("song")) {
+        parts.push(doc.song.sourceUrl
+          ? "its song isn't on this Mac, so its link is in the box"
+          : `its song isn't where it was (${doc.song.name || "unknown file"})`);
+      }
+      if (doc.missing.includes("voice")) {
+        parts.push(`the voice "${doc.voice.id}" isn't installed here`);
+      }
+      toast({ message: `Opened ${doc.title}, but ${parts.join(", and ")}.` });
+    } else {
+      toast({ message: `Opened ${doc.title}` });
+    }
+  }
+
+  const projectBtn = IconButton({
+    icon: "more-horizontal", label: "Project actions",
+    onClick: (e) => Menu(e.currentTarget, [
+      { label: "Open project…", icon: "folder", onSelect: openProject },
+      ...(projectPath ? [{
+        label: `Save "${projectPath.split("/").pop()}"`,
+        icon: "check",
+        onSelect: () => saveProject({ reuse: true }),
+      }] : []),
+      { label: "Save as project…", icon: "export", disabled: !song,
+        onSelect: () => saveProject() },
+    ]),
   });
 
   function missingInput() {
@@ -929,6 +1217,7 @@ export function NewCoverFlow() {
   paintVoice();
   paintResult();
   paintGenerate();
+  paintSuggestion();
 
   const offs = [
     subscribe(["inspectorVisible"], paintInspector),
@@ -939,7 +1228,7 @@ export function NewCoverFlow() {
   root.toolbar = {
     title: "New cover",
     search: false,
-    actions: [generateBtn],
+    actions: [projectBtn, generateBtn],
     // No Cancel in the header. Esc leaves the flow (router.handleEscape), and
     // the sidebar keeps the place you would land on marked while it is open.
   };
