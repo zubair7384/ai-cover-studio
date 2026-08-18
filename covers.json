@@ -3813,6 +3813,50 @@
       "speechVoice": null,
       "speechRate": null,
       "timings": null
+    },
+    "final_cover_20260817_215854.mp3": {
+      "id": "final_cover_20260817_215854.mp3",
+      "title": "Xhowan Echuma The Mertocracy Burushaski Song Faheem Uddin Hu Xkodwvtuucg",
+      "sourceFileName": "Xhowan_Echuma_The_mertocracy_Burushaski_Song_Faheem_uddin_Hu-xKoDWVTUuCg.wav",
+      "sourcePath": "/Users/test/Developer/ai-cover-studio/downloads/Xhowan_Echuma_The_mertocracy_Burushaski_Song_Faheem_uddin_Hu-xKoDWVTUuCg.wav",
+      "outputPath": "/Users/test/Developer/ai-cover-studio/outputs/final_cover_20260817_215854.mp3",
+      "voiceId": "sonu-nigam",
+      "voiceName": "sonu-nigam",
+      "createdAt": 1786985934.0,
+      "durationSec": 305.83,
+      "sizeBytes": 12235798,
+      "pitchShift": 0,
+      "voiceCharacter": 0.75,
+      "sampleRate": null,
+      "outputFormat": "mp3",
+      "origin": "generated",
+      "missing": false,
+      "stems": {
+        "vocals": "/Users/test/Developer/ai-cover-studio/outputs/cover_e_i9ohj8/vocals.wav",
+        "bass": "/Users/test/Developer/ai-cover-studio/outputs/cover_e_i9ohj8/bass.wav",
+        "drums": "/Users/test/Developer/ai-cover-studio/outputs/cover_e_i9ohj8/drums.wav",
+        "other": "/Users/test/Developer/ai-cover-studio/outputs/cover_e_i9ohj8/other.wav",
+        "instrumental": "/Users/test/Developer/ai-cover-studio/outputs/cover_e_i9ohj8/instrumental.wav",
+        "vocalsFx": "/Users/test/Developer/ai-cover-studio/outputs/cover_e_i9ohj8/cloned_vocals_fx.wav"
+      },
+      "layers": [
+        {
+          "path": "/Users/test/Developer/ai-cover-studio/outputs/cover_e_i9ohj8/double_fx.wav",
+          "gainDb": -6.0,
+          "delayMs": 18,
+          "semitones": 0
+        }
+      ],
+      "stemSignature": "/Users/test/Developer/ai-cover-studio/downloads/Xhowan_Echuma_The_mertocracy_Burushaski_Song_Faheem_uddin_Hu-xKoDWVTUuCg.wav|58719446|1786985511|0.0|0.0",
+      "trimStart": null,
+      "trimEnd": null,
+      "vocalGainDb": 0.0,
+      "speed": 1.0,
+      "kind": "cover",
+      "text": null,
+      "speechVoice": null,
+      "speechRate": null,
+      "timings": null
     }
   }
 }

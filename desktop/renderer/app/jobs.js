@@ -514,12 +514,27 @@ function watch(id) {
 }
 
 /**
- * Ask a job to stop. It unwinds at the next stage boundary, so the UI says
- * "Cancelling…" rather than claiming an instant stop.
+ * Ask a job to stop. It unwinds at the next cancellation check rather than
+ * instantly, so the UI says "stopping…" rather than claiming an immediate halt.
+ *
+ * `cancelling` is set on the job so every view can show that the request landed.
+ * Without it a pressed Cancel changed nothing on screen until the run actually
+ * ended, which on a training run is seconds of a button that looks broken.
+ *
+ * @returns {Promise<boolean>} whether the engine accepted the request
  */
 export async function cancelJob(id) {
-  patch(id, { note: "Cancelling — the current stage has to finish first." });
-  await fetch(`${origin()}/api/jobs/${id}/cancel`, { method: "POST" }).catch(() => {});
+  patch(id, { cancelling: true, note: "Stopping — waiting for the current step to end." });
+  try {
+    const res = await fetch(`${origin()}/api/jobs/${id}/cancel`, { method: "POST" });
+    if (!res.ok) throw new Error(String(res.status));
+    return true;
+  } catch {
+    // A request that never reached the engine must not leave the UI saying
+    // "stopping…" over a run that is still going at full tilt.
+    patch(id, { cancelling: false, note: "Couldn't stop the run — it is still going." });
+    return false;
+  }
 }
 
 /** Drop a finished job from the Activity list. */
@@ -533,6 +548,22 @@ export const latestCoverJob = () =>
   [...getState().jobs].reverse().find((j) => j.kind === "cover") || null;
 export const latestSpeechJob = () =>
   [...getState().jobs].reverse().find((j) => j.kind === "speech") || null;
+
+/**
+ * The run of a given kind that is still going, if any.
+ *
+ * A flow keeps its job id in a local variable, so leaving the view and coming
+ * back used to lose sight of a run that was still going: the job carried on in
+ * the store and in the sidecar, but the screen that reported on it showed an
+ * empty form with no progress, no log and no way to cancel. Views call this on
+ * mount to adopt what is already running.
+ *
+ * Deliberately only the running one. A finished run's output is in the library
+ * where it belongs, and resurrecting yesterday's result panel on top of a fresh
+ * form would be its own kind of wrong.
+ */
+export const runningJobOfKind = (kind) =>
+  getState().jobs.find((j) => j.kind === kind && j.status === "running") || null;
 
 
 /* ---- Training ----------------------------------------------------------- */

@@ -193,7 +193,13 @@ export function runJob(jobId, { onProgress, onLog } = {}) {
       if (msg.type === "progress") onProgress?.(msg.fraction, msg.step, msg.note);
       else if (msg.type === "log") onLog?.(msg.line);
       else if (msg.type === "done") { source.close(); resolve(msg.result || {}); }
-      else if (msg.type === "error") { source.close(); reject(new Error(msg.message)); }
+      else if (msg.type === "error") {
+        source.close();
+        // `detail` is the traceback and, for a fetch, the downloader's own
+        // words. Dropping it is why a failed fetch used to be undiagnosable
+        // from inside the app.
+        reject(Object.assign(new Error(msg.message), { detail: msg.detail || null }));
+      }
       // A cancelled job closes its stream with no result. Without this the
       // stream simply ends and the caller is told it lost the engine.
       else if (msg.type === "cancelled") {

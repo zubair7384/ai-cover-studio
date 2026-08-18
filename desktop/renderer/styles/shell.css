@@ -737,6 +737,10 @@
 }
 .linkrow__field { display: flex; align-items: center; gap: var(--sp-2); }
 .linkrow__input { flex: 1; min-width: 0; }
+.linkrow__foot {
+  display: flex; align-items: center; gap: var(--sp-2);
+  min-height: 1.4em;
+}
 .linkrow__status { color: var(--text-secondary); min-height: 1em; }
 .linkrow__status--error { color: var(--err-text); }
 
@@ -1044,7 +1048,21 @@
   border-radius: var(--r-card);
 }
 .trainpanel[hidden] { display: none; }
+
+/* This panel's readout is prose — "1/4 preprocessing dataset" — not the short
+   n/total a .meter is laid out for. Side by side in a column only
+   --inspector-w wide, a flex:none readout could neither shrink nor wrap, so the
+   step name ran straight out past the card edge. Here the bar and its readout
+   stack instead, which also gives the longer step names a full line to sit on. */
+.trainpanel .meter { flex-direction: column; align-items: stretch; gap: var(--sp-2); }
+/* .meter-bar is flex:1 for the side-by-side layout; in a column that 0 basis
+   would collapse its 4px height, so it is pinned back. */
+.trainpanel .meter-bar { flex: none; width: 100%; height: 4px; }
+.trainpanel .meter__readout { overflow-wrap: anywhere; }
+.trainpanel__head { overflow-wrap: anywhere; }
+
 .trainpanel__elapsed, .trainpanel__losshead { color: var(--text-secondary); }
+.trainpanel__elapsed { overflow-wrap: anywhere; }
 .trainpanel__actions { display: flex; flex-direction: column; gap: var(--sp-2); }
 .trainpanel__log summary { cursor: pointer; color: var(--text-secondary); }
 .logbox__bar { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); padding: var(--sp-2) 0; }

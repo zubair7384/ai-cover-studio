@@ -21,13 +21,17 @@ Training runs the open-source Applio trainer as subprocesses.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+import queue
+import signal
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import traceback
 import wave
@@ -593,7 +597,52 @@ _FETCH_ERRORS: tuple[tuple[str, str], ...] = (
     ("no video formats", "There's no downloadable audio on that page."),
     ("http error 429", "The site is rate-limiting this machine. Wait a few minutes, then try again."),
     ("ffmpeg", "ffmpeg is missing, so the download can't be converted to audio. Install it with: brew install ffmpeg"),
+    # Local causes. Each was previously answered with "update yt-dlp", which is
+    # advice for a problem the user does not have.
+    ("no space left on device", "This Mac is out of disk space, so the download couldn't be written."),
+    # DNS failure, in each platform's own words: macOS says "nodename nor
+    # servname", glibc says "name or service not known".
+    ("nodename nor servname", "No network, so the link couldn't be reached."),
+    ("name or service not known", "No network, so the link couldn't be reached."),
+    ("temporary failure in name resolution", "No network, so the link couldn't be reached."),
+    ("connection refused", "The site refused the connection. Check your network, then try again."),
+    ("timed out", "The site took too long to respond. Try again in a moment."),
+    ("http error 403", "The site refused this machine (403). It may be region-locked or asking for a signed-in account."),
+    ("http error 404", "There's nothing at that link (404) — check it."),
 )
+
+
+# Failures that really do mean the site changed shape under the extractor. Only
+# these earn the "update yt-dlp" line; a 403, a full disk or a dead network are
+# not fixed by a newer downloader, and saying so sends people down a blind alley.
+_STALE_EXTRACTOR_MARKERS = (
+    "player response",
+    "unable to extract",
+    "requested format is not available",
+    "signature",
+    "nsig",
+    "jsinterp",
+    "failed to parse json",
+    "unsupported url",
+    "please report this issue",
+)
+
+
+def _ydl_reason(message: str) -> str:
+    """
+    The one useful line out of a yt-dlp failure.
+
+    Its messages arrive as "ERROR: [youtube] dQw4w9WgXcQ: Video unavailable"
+    with the occasional trailing hint about reporting a bug. The middle of that
+    is the only part worth showing someone.
+    """
+    line = (message or "").strip().splitlines()[0] if (message or "").strip() else ""
+    line = re.sub(r"^ERROR:\s*", "", line)
+    line = re.sub(r"^\[[^\]]+\]\s*", "", line)          # extractor tag
+    line = re.sub(r"^[\w-]{6,}:\s*", "", line)           # video id
+    # Advice aimed at yt-dlp's own maintainers, not at this app's users.
+    line = re.split(r"\s*(?:Please report this issue|; please report)", line)[0]
+    return line.strip().rstrip(".")
 
 
 def _friendly_fetch_error(message: str) -> str:
@@ -601,11 +650,23 @@ def _friendly_fetch_error(message: str) -> str:
     for needle, friendly in _FETCH_ERRORS:
         if needle in text:
             return friendly
-    # The common cause of everything else is an extractor that the site has
-    # broken since this build shipped, so say the useful thing rather than
-    # echoing a traceback.
-    return ("Couldn't fetch that link. If it plays in a browser, the downloader "
-            "is probably out of date — update it with: pip install -U yt-dlp")
+
+    # Everything else. A broken extractor is one cause, but blaming it outright
+    # was wrong often enough to be a bug in itself: the message told people to
+    # update a downloader that was already current, while the actual reason —
+    # which yt-dlp had stated plainly — was discarded. Lead with what happened,
+    # and only suggest updating when the failure actually looks like the site
+    # having moved. "No space left on device · update yt-dlp" is worse than
+    # saying nothing.
+    reason = _ydl_reason(message)
+    stale = any(marker in text for marker in _STALE_EXTRACTOR_MARKERS)
+    advice = (" If it plays in a browser, the downloader is probably out of date"
+              " — update it with: pip install -U yt-dlp") if stale else ""
+
+    if reason:
+        return f"Couldn't fetch that link: {reason}.{advice}"
+    return ("Couldn't fetch that link, and the downloader gave no reason."
+            + (advice or " Check the link, then try again."))
 
 
 def _safe_stem(text: str) -> str:
@@ -1640,20 +1701,104 @@ def generate_speech(
 # ---------------------------------------------------------------------------
 # Training dataset staging
 # ---------------------------------------------------------------------------
+# What Applio's preprocessor will actually open. Everything else has to be
+# transcoded on the way into the dataset — a phone recording is `.m4a`, the file
+# picker offers `.m4a`, and Applio silently reports an empty dataset for it. The
+# fix belongs here rather than in the picker: refusing the most common source of
+# voice recordings would be a worse app than converting them.
+TRAINABLE_EXTS = {".wav", ".mp3", ".flac", ".ogg"}
+
+
+def _free_path(folder: Path, stem: str, suffix: str) -> Path:
+    """
+    An unused path in `folder`. A converted clip must not land on top of one
+    already there: a folder holding both `take.wav` and `take.m4a` is ordinary,
+    and silently replacing the wav with a transcode of the m4a would lose audio.
+    """
+    candidate = folder / f"{stem}{suffix}"
+    n = 2
+    while candidate.exists():
+        candidate = folder / f"{stem}-{n}{suffix}"
+        n += 1
+    return candidate
+
+
+def _transcode_for_training(src: Path, dest: Path) -> bool:
+    """
+    Write `src` to `dest` as WAV. Returns False if ffmpeg could not read it.
+
+    The sample rate is left alone: Applio resamples to the training rate itself,
+    and resampling twice would cost quality for nothing. Mixed down to mono
+    because that is what the trainer wants from a voice.
+    """
+    cmd = ["ffmpeg", "-y", "-loglevel", "error", "-i", str(src),
+           "-ac", "1", "-c:a", "pcm_s16le", str(dest)]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0 or not dest.exists() or dest.stat().st_size == 0:
+        detail = (result.stderr or "").strip().splitlines()[-1:] or ["no output"]
+        log.warning("Couldn't convert %s for training: %s", src.name, detail[0])
+        dest.unlink(missing_ok=True)
+        return False
+    return True
+
+
+def _resolves_into(path: Path, folder: Path) -> bool:
+    """Is `path` a file that already sits directly in `folder`?"""
+    try:
+        return path.resolve().parent == folder.resolve()
+    except OSError:
+        return False
+
+
 def stage_uploaded_samples(file_paths: list[str], safe_name: str) -> tuple[Path, int, int]:
-    """Copy uploaded audio files into training_datasets/<name>/."""
+    """
+    Copy uploaded audio into training_datasets/<name>/, converting anything the
+    trainer cannot read.
+
+    The clips passed in are the whole truth about this voice, so the folder is
+    replaced rather than added to. Adding to it was quietly expensive: every
+    attempt at the same name left its conversions behind, `_free_path` gave the
+    next attempt's copies fresh "-2", "-3", "-4" names, and the trainer then
+    worked through all of them. Three recordings became eleven files, so a
+    dataset the app called 3:26 was really about fourteen minutes of the same
+    voice repeated — four times the epoch time, on material that teaches the
+    model nothing new the second time round.
+    """
     dest = DATASETS_DIR / safe_name
     dest.mkdir(parents=True, exist_ok=True)
-    copied = skipped = 0
-    for raw in file_paths or []:
-        src = Path(raw)
-        if src.suffix.lower() in AUDIO_EXTS and src.exists():
-            shutil.copyfile(src, dest / src.name)
+    copied = skipped = converted = 0
+
+    sources = [Path(raw) for raw in file_paths or []]
+
+    # Clips already inside the folder are the folder: someone pointed training at
+    # its own staging directory. Emptying it would delete the very files being
+    # staged, so that case skips the sweep (and the self-copy below).
+    staged_in_place = any(_resolves_into(src, dest) for src in sources)
+    if not staged_in_place:
+        for stale in dest.iterdir():
+            if stale.is_file():
+                stale.unlink()
+
+    for src in sources:
+        if src.suffix.lower() not in AUDIO_EXTS or not src.exists():
+            skipped += 1
+            continue
+
+        if src.suffix.lower() in TRAINABLE_EXTS:
+            # shutil.copyfile raises on a file copied onto itself.
+            if not _resolves_into(src, dest):
+                shutil.copyfile(src, dest / src.name)
             copied += 1
+            continue
+
+        if _transcode_for_training(src, _free_path(dest, src.stem, ".wav")):
+            copied += 1
+            converted += 1
         else:
             skipped += 1
-    log.info("Staged %d sample(s) into %s (%d non-audio skipped)",
-             copied, dest, skipped)
+
+    log.info("Staged %d sample(s) into %s (%d converted to WAV, %d skipped)",
+             copied, dest, converted, skipped)
     return dest, copied, skipped
 
 
@@ -1690,22 +1835,235 @@ def _applio_base_python() -> str:
     return sys.executable
 
 
-def _stream(cmd: list, cwd: Path, log_cb: Callable[[str], None], desc: str) -> None:
-    """Run a command, forwarding stdout lines to log_cb; raise on failure."""
+# tqdm redraws its bar on the same line thousands of times. None of it is the
+# reason a step failed, so it never belongs in an error message. No word
+# boundary before the rate units: they arrive glued to a number ("103.28s/it"),
+# where there is no boundary to match.
+_PROGRESS_NOISE = re.compile(r"\d+%\s*\||\d+(\.\d+)?\s*(s/it|it/s)|^\s*$")
+
+
+# Applio's CLI wrappers catch a failed step, print a sentence about it, and then
+# return normally — `subprocess.run(...); if result.returncode != 0: return
+# f"Training failed for model {name}..."`. The exit code is 0 either way, so a
+# step that died looked like a step that worked, and the pipeline carried on to
+# the next one. Training was the expensive place to learn this: the run sailed
+# through the index step and only failed at the end, with "Training finished but
+# no weight file found", which describes the symptom and hides the cause.
+#
+# Every wrapper words it the same way, so the sentence itself is the signal.
+_APPLIO_SILENT_FAILURES = (
+    "preprocessing failed for model",
+    "feature extraction failed for model",
+    "training failed for model",
+    "index generation failed for model",
+)
+
+
+# How often to ask whether the run has been cancelled, while a step is talking.
+_HEARTBEAT_SECONDS = 2.0
+# How long a terminated trainer gets to exit before it is killed outright.
+_KILL_GRACE_SECONDS = 5.0
+
+
+def _stop_process(proc: "subprocess.Popen") -> None:
+    """
+    End a training subprocess and everything it spawned.
+
+    Applio's trainer forks workers of its own, so signalling only the process we
+    started would leave those running — pinning the CPU of a machine whose owner
+    just asked the work to stop. It is started in its own session precisely so
+    the whole group can be signalled here.
+    """
+    if proc.poll() is not None:
+        return
+    try:
+        if sys.platform == "win32":
+            proc.terminate()
+        else:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+    except (ProcessLookupError, PermissionError, OSError):
+        return
+
+    try:
+        proc.wait(timeout=_KILL_GRACE_SECONDS)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+
+    try:
+        if sys.platform == "win32":
+            proc.kill()
+        else:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except (ProcessLookupError, PermissionError, OSError):
+        pass
+
+
+def _stream(cmd: list, cwd: Path, log_cb: Callable[[str], None], desc: str,
+            heartbeat: Optional[Callable[[], None]] = None,
+            fail_markers: tuple[str, ...] = _APPLIO_SILENT_FAILURES) -> None:
+    """
+    Run a command, forwarding stdout lines to log_cb; raise on failure.
+
+    The failure carries the trainer's own last words. Reporting only the exit
+    code sent people hunting through a collapsed log for a sentence the trainer
+    had already written plainly — "No audio files found in the dataset path" is
+    the whole answer, and "exit code 2" is none of it.
+
+    A step counts as failed if it exits non-zero *or* if it says so in the words
+    of `fail_markers`, because Applio's wrappers announce a dead step and then
+    exit 0 (see _APPLIO_SILENT_FAILURES).
+
+    `heartbeat` is called every couple of seconds and is expected to raise if
+    the job has been cancelled. Without it, cancellation was only noticed between
+    steps: pressing Cancel during a three-hundred-epoch training step did nothing
+    at all until that step finished, which is to say it did nothing.
+
+    The beat cannot be driven by the output itself, which is why the lines are
+    read on a thread. `for line in proc.stdout` blocks until a newline arrives,
+    and Applio spends long stretches either silent (preprocessing a large
+    dataset) or redrawing a tqdm bar with carriage returns and no newline at all.
+    Beating only on complete lines therefore left Cancel dead for exactly the
+    stretches people want to escape from.
+    """
     cmd = [str(c) for c in cmd]
     log.info("[train] %s: %s", desc, " ".join(cmd))
     proc = subprocess.Popen(
         cmd, cwd=str(cwd),
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, bufsize=1,
+        # Unbuffered, because Applio's trainer ends itself with os._exit() —
+        # which skips the flush that a normal exit would do. Down a pipe, Python
+        # block-buffers stdout, so the one line explaining the failure ("Error:
+        # Pretrained model sample rate (40000 Hz) does not match dataset audio
+        # sample rate (32000 Hz)") was written into a buffer that was then thrown
+        # away. The app showed an empty log for a run that had said exactly what
+        # was wrong.
+        env={**os.environ, "PYTHONUNBUFFERED": "1"},
+        # Its own process group, so cancelling takes the trainer's workers with
+        # it rather than orphaning them.
+        start_new_session=(sys.platform != "win32"),
     )
-    for line in proc.stdout:
-        line = line.rstrip()
-        if line:
-            log_cb(line)
+
+    # None is the end-of-output sentinel, so the loop below can tell "nothing yet"
+    # (keep waiting, keep beating) from "the pipe is closed" (stop).
+    lines: "queue.Queue[Optional[str]]" = queue.Queue()
+
+    def pump() -> None:
+        try:
+            for raw in proc.stdout:
+                lines.put(raw)
+        except (ValueError, OSError):
+            pass          # the pipe was closed under us by _stop_process
+        finally:
+            lines.put(None)
+
+    reader = threading.Thread(target=pump, name=f"stream:{desc}", daemon=True)
+    reader.start()
+
+    tail: list[str] = []
+    disowned = False           # the step said it failed, whatever it exits with
+    last_beat = time.monotonic()
+    try:
+        while True:
+            try:
+                raw = lines.get(timeout=_HEARTBEAT_SECONDS)
+            except queue.Empty:
+                raw = ""      # nothing was said; fall through to the beat
+            if raw is None:
+                break
+
+            line = raw.rstrip()
+            if line:
+                log_cb(line)
+                if not _PROGRESS_NOISE.search(line):
+                    tail.append(line)
+                    del tail[:-12]   # only the end of the output can explain it
+                lowered = line.lower()
+                if any(marker in lowered for marker in fail_markers):
+                    disowned = True
+
+            now = time.monotonic()
+            if heartbeat and now - last_beat >= _HEARTBEAT_SECONDS:
+                last_beat = now
+                heartbeat()
+    except BaseException:
+        # Includes the cancellation raised out of the heartbeat.
+        _stop_process(proc)
+        raise
+
     proc.wait()
-    if proc.returncode != 0:
-        raise RuntimeError(f"'{desc}' failed (exit code {proc.returncode}).")
+    if proc.returncode == 0 and not disowned:
+        return
+
+    raise RuntimeError(_step_failure(desc, proc.returncode, tail))
+
+
+def _step_failure(desc: str, code: int, tail: list[str]) -> str:
+    """A sentence for a failed training step, from whatever the tool said."""
+    # Applio's own summaries repeat the step and add nothing.
+    ignorable = ("please check the console logs", "failed for model",
+                 "traceback (most recent call last)")
+    said = [ln for ln in reversed(tail)
+            if not any(bit in ln.lower() for bit in ignorable)
+            # Filtered here as well as in _stream: a caller assembling a tail by
+            # some other route must still never show a progress bar as a reason.
+            and not _PROGRESS_NOISE.search(ln)]
+    # "failed: Error: ..." reads as a stutter; the sentence after it is the point.
+    reason = re.sub(r"^Error:\s*", "", said[0].strip()) if said else ""
+
+    # click rejects an unknown option with exit code 2. That is a mismatch
+    # between this app and the trainer it drives, not anything the user did, so
+    # it says so rather than implying bad input.
+    if code == 2 and any("no such option" in ln.lower() for ln in tail):
+        return (f"The trainer rejected how Vocalis called it during {desc} "
+                f"({reason or 'unknown option'}). This is a bug in Vocalis, not "
+                "in your recordings.")
+
+    if reason:
+        return f"{desc.capitalize()} failed: {reason}"
+    return f"{desc.capitalize()} failed (exit code {code})."
+
+
+def _run_dir_sample_rate(run_dir: Path) -> Optional[str]:
+    """The rate a previous attempt under this name was set up for, if any."""
+    try:
+        cfg = json.loads((run_dir / "config.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    rate = (cfg.get("data") or {}).get("sample_rate")
+    return str(int(rate)) if rate else None
+
+
+def _discard_mismatched_run(safe_name: str, sample_rate: str,
+                            log_cb: LogCb = None) -> None:
+    """
+    Clear a previous attempt at this name that was set up for another rate.
+
+    Applio writes logs/<name>/config.json only when it is absent
+    (`generate_config` is an `if not os.path.exists` copy), so a second attempt
+    at the same name kept the first attempt's rate while preprocessing wrote
+    audio at the rate actually asked for. The trainer compares the two, refuses
+    the mismatch, and — exiting 0 as it does — used to let the pipeline carry on
+    to the index step and fail at the very end with "Training finished but no
+    weight file found", hours later and about the wrong thing.
+
+    Nothing in the old attempt survives a change of rate: its checkpoints have
+    the wrong shapes to resume from, and its sliced audio is at the wrong rate.
+    So it goes, and only when the rate really differs — a rerun at the same rate
+    still resumes from where it left off.
+    """
+    emit = log_cb or _noop_log
+    run_dir = APPLIO_DIR / "logs" / safe_name
+    previous = _run_dir_sample_rate(run_dir)
+    if previous is None or previous == str(sample_rate):
+        return
+
+    khz = lambda rate: f"{int(rate) // 1000} kHz"       # noqa: E731
+    emit(f"Clearing the earlier {khz(previous)} attempt at {safe_name}: nothing "
+         f"from it can be reused at {khz(sample_rate)}.")
+    log.info("Discarding %s (was %s, now %s)", run_dir, previous, sample_rate)
+    shutil.rmtree(run_dir, ignore_errors=True)
 
 
 def resolve_training_dataset(file_paths, dataset_dir, safe_name) -> tuple[Optional[Path], Optional[str]]:
@@ -1713,8 +2071,8 @@ def resolve_training_dataset(file_paths, dataset_dir, safe_name) -> tuple[Option
     if file_paths:
         dest, copied, _ = stage_uploaded_samples(file_paths, safe_name)
         if not copied:
-            return None, ("None of the uploaded files look like audio "
-                          "(.mp3/.wav/.flac …). Add voice clips and try again.")
+            return None, ("None of those files could be read as audio. Add voice "
+                          "clips (WAV, MP3, FLAC, M4A or AIFF) and try again.")
         return dest, None
     dataset_dir = (dataset_dir or "").strip()
     if not dataset_dir:
@@ -1723,17 +2081,34 @@ def resolve_training_dataset(file_paths, dataset_dir, safe_name) -> tuple[Option
     ds = Path(dataset_dir).expanduser()
     if not ds.is_dir():
         return None, f"Folder not found: {ds}"
-    if not any(p.suffix.lower() in AUDIO_EXTS for p in ds.iterdir()):
+
+    clips = [p for p in ds.iterdir()
+             if p.is_file() and p.suffix.lower() in AUDIO_EXTS]
+    if not clips:
         return None, f"No audio files found in {ds}"
-    return ds, None
+
+    # A folder the trainer can read is used where it is. One holding phone
+    # recordings is staged as a converted copy instead — writing WAVs into
+    # somebody's own folder to work around a trainer limitation would be a
+    # side effect they never asked for.
+    if all(p.suffix.lower() in TRAINABLE_EXTS for p in clips):
+        return ds, None
+
+    dest, copied, _ = stage_uploaded_samples([str(p) for p in clips], safe_name)
+    if not copied:
+        return None, (f"None of the audio in {ds.name} could be read. Convert it "
+                      "to WAV or MP3 and try again.")
+    return dest, None
 
 
 def train_voice_model(
     file_paths: list[str],
     dataset_dir: str,
     model_name: str,
-    sample_rate: str = "40000",
-    epochs: int = 300,
+    # 32 kHz and a low epoch count by default: on the CPU/MPS hardware this app
+    # runs on, the old 40 kHz / 300 epoch pair was a multi-day commitment.
+    sample_rate: str = "32000",
+    epochs: int = 100,
     progress_cb: ProgressCb = None,
     log_cb: LogCb = None,
 ) -> dict:
@@ -1758,7 +2133,9 @@ def train_voice_model(
             raise RuntimeError("git is required to install the Applio trainer.")
         progress(0.02, "Downloading Applio trainer (one time)…", "")
         _stream(["git", "clone", "--depth", "1", APPLIO_REPO, APPLIO_DIR],
-                RESOURCE_DIR, emit, "clone Applio")
+                RESOURCE_DIR, emit, "clone Applio",
+                heartbeat=lambda: progress(0.02, "Downloading Applio trainer "
+                                           "(one time)…", ""))
 
     if not APPLIO_DEPS_OK.exists():
         if APPLIO_VENV.exists():
@@ -1775,16 +2152,20 @@ def train_voice_model(
                     APPLIO_DIR, emit, "pre-install omegaconf")
         progress(0.10, "Installing Applio requirements (one time, several minutes)…", "")
         _stream([APPLIO_PY, "-m", "pip", "install", "-r", "requirements.txt"],
-                APPLIO_DIR, emit, "install Applio requirements")
+                APPLIO_DIR, emit, "install Applio requirements",
+                heartbeat=lambda: progress(0.10, "Installing Applio requirements "
+                                           "(one time, several minutes)…", ""))
         APPLIO_DEPS_OK.touch()
 
     # Applio's CLI assumes its predictor/pretrained models exist but never
     # fetches them itself.
     if not (APPLIO_DIR / "rvc" / "models" / "predictors" / "rmvpe.pt").exists():
         progress(0.20, "Downloading Applio base models (one time)…", "")
-        _stream([APPLIO_PY, "core.py", "prerequisites", "--models", "True",
-                 "--pretraineds_hifigan", "True", "--exe", "False"],
-                APPLIO_DIR, emit, "download Applio base models")
+        _stream([APPLIO_PY, "core.py", "prerequisites",
+                 "--models", "--pretraineds-hifigan", "--no-exe"],
+                APPLIO_DIR, emit, "download Applio base models",
+                heartbeat=lambda: progress(0.20, "Downloading Applio base models "
+                                           "(one time)…", ""))
 
     # Applio's weight export reads assets/config.json but only its web UI
     # creates that file.
@@ -1793,27 +2174,46 @@ def train_voice_model(
         assets_cfg.parent.mkdir(parents=True, exist_ok=True)
         assets_cfg.write_text('{"model_author": null}')
 
+    # Retraining the same name at a different rate cannot reuse the old attempt.
+    _discard_mismatched_run(safe_name, sample_rate, emit)
+
     # -- the actual pipeline ----------------------------------------------
+    #
+    # Applio's CLI moved from argparse to click, which renamed every option from
+    # snake_case to kebab-case and turned the boolean ones into bare flags. The
+    # old spelling now fails the whole run at the first step with click's
+    # "no such option" and exit code 2, which is what "1/4 preprocessing dataset
+    # failed (exit code 2)" was. Passing "True" after a flag would fail the same
+    # way, since a click flag takes no value.
+    #
+    # `--save-every-weights` is absent on purpose: it is a flag that already
+    # defaults to true, and the per-epoch weight files are what the install step
+    # below looks for.
     steps = [
         (0.30, "1/4 preprocessing dataset",
-         [APPLIO_PY, "core.py", "preprocess", "--model_name", safe_name,
-          "--dataset_path", dataset, "--sample_rate", sample_rate,
-          "--cut_preprocess", "Automatic"]),
+         [APPLIO_PY, "core.py", "preprocess", "--model-name", safe_name,
+          "--dataset-path", dataset, "--sample-rate", sample_rate,
+          "--cut-preprocess", "Automatic",
+          "--cpu-cores", str(min(64, os.cpu_count() or 4))]),
         (0.45, "2/4 extracting features (RMVPE)",
-         [APPLIO_PY, "core.py", "extract", "--model_name", safe_name,
-          "--f0_method", "rmvpe", "--sample_rate", sample_rate,
-          "--include_mutes", "2", "--cpu_cores", str(os.cpu_count() or 4)]),
+         [APPLIO_PY, "core.py", "extract", "--model-name", safe_name,
+          "--f0-method", "rmvpe", "--sample-rate", sample_rate,
+          "--include-mutes", "2",
+          "--cpu-cores", str(min(64, os.cpu_count() or 4))]),
         (0.55, f"3/4 training ({epochs} epochs — the long part)",
-         [APPLIO_PY, "core.py", "train", "--model_name", safe_name,
-          "--sample_rate", sample_rate, "--total_epoch", epochs,
-          "--save_every_epoch", "25", "--save_only_latest", "True",
-          "--save_every_weights", "True"]),
+         [APPLIO_PY, "core.py", "train", "--model-name", safe_name,
+          "--sample-rate", sample_rate, "--total-epoch", epochs,
+          "--save-every-epoch", "25", "--save-only-latest"]),
         (0.92, "4/4 building retrieval index",
-         [APPLIO_PY, "core.py", "index", "--model_name", safe_name]),
+         [APPLIO_PY, "core.py", "index", "--model-name", safe_name]),
     ]
     for frac, step_desc, cmd in steps:
         progress(frac, step_desc, "")
-        _stream(cmd, APPLIO_DIR, emit, step_desc)
+        # The heartbeat is the same progress callback, which raises when the job
+        # has been cancelled. Without it, Cancel during the training step — the
+        # one that lasts hours — was noticed only once that step had finished.
+        _stream(cmd, APPLIO_DIR, emit, step_desc,
+                heartbeat=lambda f=frac, d=step_desc: progress(f, d, ""))
 
     # -- install the trained files into voice_models/ ---------------------
     progress(0.97, "Installing trained model…", "")

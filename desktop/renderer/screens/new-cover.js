@@ -23,7 +23,9 @@ import { MeterBar } from "../components/meter/meter-bar.js";
 import { getState, set, subscribe } from "../app/store.js";
 import { exitFlow, setFlowDirtyCheck } from "../app/router.js";
 import { api, mediaUrl, runJob, loadCovers } from "../app/api.js";
-import { startCover, cancelJob, getJob, COVER_STAGE_IDS } from "../app/jobs.js";
+import {
+  startCover, cancelJob, getJob, runningJobOfKind, COVER_STAGE_IDS,
+} from "../app/jobs.js";
 import { MixPlayer } from "../app/mix-player.js";
 import { toast } from "../app/toast.js";
 import { initials } from "../app/profile.js";
@@ -214,10 +216,20 @@ export function NewCoverFlow() {
   const linkMeter = MeterBar({ value: 0, ariaLabel: "Download progress" });
   const linkStatus = el("div", { class: "t-caption linkrow__status" }, "");
 
+  // A failed fetch has a real cause that the friendly message may only be
+  // guessing at — a stale extractor, a bot check, a region block all arrive the
+  // same way. The downloader's own words go behind this rather than being
+  // dropped, which is what made "couldn't fetch that link" a dead end.
+  let fetchDetail = null;
+  const linkDetailBtn = Button({
+    label: "Copy details", variant: "tertiary", size: "sm",
+    onClick: () => navigator.clipboard.writeText(fetchDetail || ""),
+  });
+
   const linkRow = el("div", { class: "linkrow" },
     el("div", { class: "linkrow__field" }, linkInput, linkBtn, linkCancel),
     linkMeter,
-    linkStatus,
+    el("div", { class: "linkrow__foot" }, linkStatus, linkDetailBtn),
   );
 
   function paintLink(progress = 0, note = "") {
@@ -230,12 +242,14 @@ export function NewCoverFlow() {
     linkMeter.setValue(progress);
     linkStatus.textContent = fetchError || (busy ? note : "");
     linkStatus.classList.toggle("linkrow__status--error", Boolean(fetchError));
+    linkDetailBtn.hidden = !(fetchError && fetchDetail);
   }
 
   async function fetchLink(url = linkInput.value.trim()) {
     if (!url || fetchJobId) return;
     linkInput.value = url;
     fetchError = null;
+    fetchDetail = null;
     try {
       const { job_id } = await api.fetchUrl(url);
       fetchJobId = job_id;
@@ -261,6 +275,7 @@ export function NewCoverFlow() {
     } catch (err) {
       fetchJobId = null;
       fetchError = err.cancelled ? "Fetch cancelled." : err.message;
+      fetchDetail = err.cancelled ? null : (err.detail || null);
       paintLink();
       paintGenerate();
     }
@@ -1211,6 +1226,16 @@ export function NewCoverFlow() {
   // dropdown while claiming "3 voice models available", which was a dead end.
   if (!voiceId && voices().length) {
     voiceId = [...voices()].sort((a, b) => b.modified - a.modified)[0].name;
+  }
+
+  // Re-adopt a cover still being generated, so leaving this view and coming
+  // back shows the run rather than an empty form over the top of it. The song
+  // and voice fields cannot be recovered — they were never sent to the server —
+  // but the pipeline, the progress and Cancel all come back.
+  const runningCover = runningJobOfKind("cover");
+  if (runningCover) {
+    jobId = runningCover.id;
+    if (!voiceId) voiceId = runningCover.voiceId || null;
   }
 
   paintSong();

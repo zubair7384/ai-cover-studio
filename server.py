@@ -785,8 +785,8 @@ def train(payload: dict) -> dict:
                             detail="A training job is already running.")
 
     model_name = str(payload.get("model_name", "my_voice"))
-    sample_rate = str(payload.get("sample_rate", "40000"))
-    epochs = int(payload.get("epochs", 300) or 300)
+    sample_rate = str(payload.get("sample_rate", "32000"))
+    epochs = int(payload.get("epochs", 100) or 100)
     dataset_dir = str(payload.get("dataset_dir", ""))
     safe_name = engine.safe_model_name(model_name)
     sample_paths = [str(p) for p in (payload.get("paths") or [])]

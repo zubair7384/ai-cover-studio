@@ -16,13 +16,13 @@
 import { el, cls, on } from "../lib/dom.js";
 import { icon as makeIcon } from "../lib/icons.js";
 import {
-  Button, Checkbox, IconButton, Popover, Select, Sheet, Slider, TextField, Toggle,
+  Button, IconButton, Popover, Select, Sheet, Slider, TextField, Toggle,
 } from "../components/primitives/index.js";
 import { MeterBar, MeterSegments } from "../components/meter/index.js";
-import { getState, set, subscribe } from "../app/store.js";
+import { getState, set, subscribe, persist, readPersisted } from "../app/store.js";
 import { exitFlow, setFlowDirtyCheck } from "../app/router.js";
 import { origin } from "../app/api.js";
-import { startTraining, cancelJob, getJob } from "../app/jobs.js";
+import { startTraining, cancelJob, getJob, runningJobOfKind } from "../app/jobs.js";
 import * as fmt from "../app/format.js";
 
 /** The healthy range, in seconds. */
@@ -38,16 +38,64 @@ const SAMPLE_RATES = [
 ];
 
 /**
- * Wall-clock estimate. Measured against this machine's own device tier and the
- * amount of material — crude, and labelled as an estimate everywhere it appears.
+ * Wall-clock estimate.
+ *
+ * This used to be a single hardcoded constant of 1.1 seconds per epoch per
+ * minute of audio, which predicted about four seconds an epoch. A measured epoch
+ * on an MPS Mac with 3½ minutes of audio took roughly eighty. The card therefore
+ * promised half an hour for a run that would have taken most of a day — the kind
+ * of wrong number that makes someone start a job they would have refused.
+ *
+ * So the figure is now measured rather than asserted: every completed run writes
+ * back what it actually cost, and later estimates use that. The default below is
+ * only what the first run on a new machine has to go on, and it is presented as
+ * a range until there is a real measurement to replace it.
  */
-const SECONDS_PER_EPOCH_PER_MINUTE = 1.1;   // CPU/MPS, per epoch, per minute of audio
+const DEFAULT_SEC_PER_EPOCH_PER_MIN = 20;   // one measured MPS run, unloaded ≈ 23
+const CALIBRATION_KEY = "trainPace";
 
+/** Seconds per epoch per minute of audio, as last measured on this machine. */
+function pace() {
+  const saved = Number(readPersisted(CALIBRATION_KEY, 0));
+  return saved > 0 ? saved : DEFAULT_SEC_PER_EPOCH_PER_MIN;
+}
+
+const isCalibrated = () => Number(readPersisted(CALIBRATION_KEY, 0)) > 0;
+
+/**
+ * Record what a finished run cost, so the next estimate is this machine's own
+ * number. Ignores anything implausible — a cancelled run reported as done, or a
+ * clock jump — rather than poisoning every future estimate with it.
+ */
+function recordPace({ elapsedSec, epochs: ran, audioSeconds }) {
+  const minutes = audioSeconds / 60;
+  if (!(elapsedSec > 0) || !(ran > 0) || !(minutes > 0)) return;
+  const measured = elapsedSec / (ran * minutes);
+  if (measured < 0.5 || measured > 600) return;
+  persist(CALIBRATION_KEY, Number(measured.toFixed(2)));
+}
+
+/**
+ * Quality presets.
+ *
+ * All three train at 32 kHz and none goes past 150 epochs. The old cards asked
+ * for 300 and 500 epochs at 40 kHz, which on the CPU/MPS hardware this app runs
+ * on is a multi-day run — a setting nobody ever saw the end of is not a quality
+ * option. Cost is linear in both epochs and sample rate, so this is the pair of
+ * levers that turns training from "in principle" into "tonight".
+ */
 const PRESETS = [
-  { id: "quick", label: "Quick", epochs: 150, blurb: "Rough but usable. Good for a first listen." },
-  { id: "balanced", label: "Balanced", epochs: 300, blurb: "The setting most voices want." },
-  { id: "high", label: "High", epochs: 500, blurb: "Slower, with a little more detail." },
+  { id: "low", label: "Low", epochs: 50, rate: "32000",
+    blurb: "A first listen, quick enough to tell whether the recordings are usable." },
+  { id: "standard", label: "Standard", epochs: 100, rate: "32000",
+    blurb: "The setting most voices want." },
+  { id: "max", label: "Max", epochs: 150, rate: "32000",
+    blurb: "As far as it is worth pushing on this hardware." },
 ];
+
+/** Bounds for the manual slider, kept in step with the presets above. */
+const EPOCH_MIN = 50;
+const EPOCH_MAX = 150;
 
 const GOOD_RECORDING_TIPS = [
   "One voice only — no backing track, no other singers.",
@@ -61,9 +109,9 @@ export function TrainFlow() {
   /* ---- state ----------------------------------------------------------- */
 
   let clips = [];              // [{ path, name, durationSec, sampleRate, warning }]
-  let sampleRate = "40000";
-  let preset = "balanced";
-  let epochs = 300;
+  let sampleRate = "32000";
+  let preset = "standard";
+  let epochs = 100;
   let jobId = null;
 
   const totalSeconds = () => clips.reduce((n, c) => n + (c.durationSec || 0), 0);
@@ -73,7 +121,19 @@ export function TrainFlow() {
 
   const estimateSeconds = (epochCount) => {
     const minutes = Math.max(1, totalSeconds() / 60);
-    return epochCount * minutes * SECONDS_PER_EPOCH_PER_MINUTE;
+    return epochCount * minutes * pace();
+  };
+
+  /**
+   * The estimate as text. Before this machine has been measured the figure is a
+   * guess, and a guess printed to the second ("~31:24") reads as a promise — so
+   * an uncalibrated estimate is rounded and hedged instead.
+   */
+  const estimateText = (epochCount) => {
+    const seconds = estimateSeconds(epochCount);
+    if (isCalibrated()) return `~${fmt.duration(seconds)}`;
+    if (seconds < 3600) return `~${Math.round(seconds / 60)} min`;
+    return `~${(seconds / 3600).toFixed(seconds < 36000 ? 1 : 0)} hr`;
   };
 
   /* ---- 1. RECORDINGS --------------------------------------------------- */
@@ -219,20 +279,39 @@ export function TrainFlow() {
     return Boolean(v) && !/[\s/\\]/.test(v) && !existingNames().includes(v.toLowerCase());
   };
 
+  /**
+   * Change the training rate.
+   *
+   * A preset carries a rate as well as an epoch count, so this has to be
+   * callable from the cards too — and when it is, the Select has to be told,
+   * or the form would show 40 kHz while training at 32.
+   */
+  function setSampleRate(value, { syncSelect = false } = {}) {
+    if (value === sampleRate) return;
+    sampleRate = value;
+    if (syncSelect) rateSelect.input.value = value;
+    // Warnings depend on the target rate, so re-probe what is already in.
+    if (clips.length) {
+      probe(clips.map((c) => c.path)).then((probed) => {
+        clips = probed;
+        paintRecordings();
+      });
+    }
+  }
+
   const rateSelect = Select({
     label: "Sample rate",
     options: SAMPLE_RATES,
     value: sampleRate,
-    help: "40 kHz suits singing. Use 48 kHz only if all your recordings are 48 kHz.",
+    help: "32 kHz trains fastest and is plenty for singing. Higher rates cost "
+        + "proportionally more time.",
     onChange: (v) => {
-      sampleRate = v;
-      // Warnings depend on the target rate, so re-probe what is already in.
-      if (clips.length) {
-        probe(clips.map((c) => c.path)).then((probed) => {
-          clips = probed;
-          paintRecordings();
-        });
-      }
+      setSampleRate(v);
+      // Each card names a rate as well as an epoch count, so a hand-picked rate
+      // that disagrees with the selected card has to release it rather than
+      // leave the card asserting a setting that is no longer in force.
+      const active = PRESETS.find((p) => p.id === preset);
+      if (active && active.rate !== v) { preset = null; paintPresets(); }
     },
   });
 
@@ -240,8 +319,12 @@ export function TrainFlow() {
 
   const qualityRow = el("div", { class: "presets" });
   const manualSlider = Slider({
-    label: "Epochs", min: 50, max: 1000, step: 10, value: epochs,
+    label: "Epochs", min: EPOCH_MIN, max: EPOCH_MAX, step: 10, value: epochs,
     format: (v) => String(v),
+    // The ceiling used to be 1000, which on this hardware is weeks of work
+    // reachable by dragging one handle.
+    help: `${EPOCH_MIN}–${EPOCH_MAX}. Past ${EPOCH_MAX} the wait grows faster `
+        + "than the voice improves.",
     onInput: (v) => { epochs = v; preset = null; paintPresets(); paintStart(); },
   });
   const manual = el("details", { class: "quality__manual" },
@@ -260,14 +343,16 @@ export function TrainFlow() {
           preset = p.id;
           epochs = p.epochs;
           manualSlider.setValue(p.epochs);
+          setSampleRate(p.rate, { syncSelect: true });
           paintPresets();
           paintStart();
         },
       },
         el("div", { class: "preset__name t-body-em" }, p.label),
-        el("div", { class: "preset__epochs t-meter tabular" }, `${p.epochs} epochs`),
+        el("div", { class: "preset__epochs t-meter tabular" },
+          `${p.epochs} epochs · ${Math.round(Number(p.rate) / 1000)} kHz`),
         el("div", { class: "preset__time t-meter tabular" },
-          clips.length ? `~${fmt.duration(estimateSeconds(p.epochs))}` : "—"),
+          clips.length ? estimateText(p.epochs) : "—"),
         el("div", { class: "preset__blurb t-caption" }, p.blurb),
       );
       qualityRow.appendChild(card);
@@ -277,10 +362,20 @@ export function TrainFlow() {
   // Inline, directly above Start — not a banner.
   const commitLine = el("p", { class: "commit t-caption measure" }, "");
   function paintCommit() {
-    commitLine.textContent = clips.length
-      ? `About ${fmt.duration(estimateSeconds(epochs))} on this Mac. Training uses the CPU — `
-        + "you can keep using Vocalis, but other apps may feel slower."
-      : "Add recordings to see how long this will take.";
+    if (!clips.length) {
+      commitLine.textContent = "Add recordings to see how long this will take.";
+      return;
+    }
+    // The hedge is the honest part on a machine that has never finished a run:
+    // the number comes from someone else's hardware until this one has timed
+    // itself, and a training run is too long a commitment to overstate.
+    commitLine.textContent = isCalibrated()
+      ? `About ${fmt.duration(estimateSeconds(epochs))} on this Mac, based on `
+        + "your last run. Training uses the CPU — you can keep using Vocalis, "
+        + "but other apps may feel slower."
+      : `Roughly ${estimateText(epochs)} on this Mac — a first guess, which `
+        + "Vocalis replaces with a measurement after one run. Training uses the "
+        + "CPU, so other apps may feel slower.";
   }
 
   /* ---- training panel -------------------------------------------------- */
@@ -289,12 +384,20 @@ export function TrainFlow() {
   const panel = el("aside", { class: "trainpanel", hidden: true });
   let meterBar = null;
   let sparkline = null;
+  let lossHead = null;
   let logBox = null;
+  let cancelBtn = null;
   let follow = true;
 
   function paintPanel() {
     const job = jobId ? getJob(jobId) : null;
-    if (!job) { panel.hidden = true; panel.innerHTML = ""; meterBar = null; return; }
+    if (!job) {
+      panel.hidden = true;
+      panel.innerHTML = "";
+      meterBar = null;
+      cancelBtn = null;
+      return;
+    }
     panel.hidden = false;
 
     if (!meterBar) {
@@ -315,11 +418,20 @@ export function TrainFlow() {
         onChange: (on) => { follow = on; },
       });
 
+      // The Loss chart and its label are held back until there is a curve to
+      // draw. A titled 40px void is the empty black box the redesign set out to
+      // remove (§1, U11) — and loss only starts arriving once training proper
+      // begins, so a run that fails in preprocessing would otherwise show a
+      // heading over nothing for as long as it stays on screen.
+      lossHead = el("div", { class: "trainpanel__losshead t-caption" }, "Loss");
+      lossHead.hidden = true;
+      sparkline.style.display = "none";
+
       panel.append(
         el("div", { class: "trainpanel__head t-body-em" }, job.name),
         meterBar,
         el("div", { class: "trainpanel__elapsed t-meter tabular" }, ""),
-        el("div", { class: "trainpanel__losshead t-caption" }, "Loss"),
+        lossHead,
         sparkline,
         el("details", { class: "trainpanel__log" },
           el("summary", { class: "t-body-em" }, "Show log"),
@@ -332,22 +444,29 @@ export function TrainFlow() {
           logBox,
         ),
         el("div", { class: "trainpanel__actions" },
-          Button({ label: "Cancel training", variant: "destructive", size: "sm",
-            onClick: () => confirmCancel(job) }),
+          (cancelBtn = Button({ label: "Cancel training", variant: "destructive",
+            size: "sm", onClick: () => confirmCancel(job) })),
         ),
       );
     }
 
     if (job.status === "running") {
       meterBar.setValue(job.progress);
-      meterBar.setReadout(job.epoch
-        ? `epoch ${job.epoch} / ${job.totalEpochs}`
-        : (job.note || "preparing"));
+      // Stopping takes a few seconds: the trainer is signalled and then given
+      // time to put its workers down. Without saying so, the panel carried on
+      // reporting the step it was told to abandon, and the button read as broken.
+      meterBar.setReadout(job.cancelling
+        ? "stopping…"
+        : (job.epoch
+          ? `epoch ${job.epoch} / ${job.totalEpochs}`
+          : (job.note || "preparing")));
       const elapsed = panel.querySelector(".trainpanel__elapsed");
       if (elapsed) {
         elapsed.textContent = `elapsed ${fmt.duration(job.elapsedSec)}`
-          + (job.etaSec ? ` · about ${fmt.duration(job.etaSec)} left` : "");
+          + (job.etaSec && !job.cancelling
+            ? ` · about ${fmt.duration(job.etaSec)} left` : "");
       }
+      if (job.cancelling) markCancelling();
     }
 
     paintSparkline(job.loss || []);
@@ -359,12 +478,28 @@ export function TrainFlow() {
 
     if (job.status === "done") paintPanelDone(job);
     if (job.status === "failed") paintPanelFailed(job);
+    if (job.status === "cancelled") paintPanelCancelled(job);
+  }
+
+  /** The Cancel button, once pressed, says what it is doing and stops taking clicks. */
+  function markCancelling() {
+    if (!cancelBtn || cancelBtn.disabled) return;
+    cancelBtn.disabled = true;
+    const label = cancelBtn.querySelector(".btn__label");
+    if (label) label.textContent = "Stopping…";
   }
 
   function paintSparkline(series) {
     if (!sparkline) return;
     sparkline.innerHTML = "";
-    if (series.length < 2) return;
+
+    // Two points is the minimum that makes a line. Below that the chart and its
+    // label stay out of the layout entirely rather than reserving space for a
+    // curve that may never arrive.
+    const drawable = series.length >= 2;
+    if (lossHead) lossHead.hidden = !drawable;
+    sparkline.style.display = drawable ? "" : "none";
+    if (!drawable) return;
     const min = Math.min(...series);
     const max = Math.max(...series);
     const span = max - min || 1;
@@ -385,6 +520,14 @@ export function TrainFlow() {
     const actions = panel.querySelector(".trainpanel__actions");
     if (!actions || actions.dataset.done) return;
     actions.dataset.done = "1";
+
+    // What this run actually cost, so the next estimate is this machine's own
+    // figure rather than a constant baked in by whoever shipped the app.
+    recordPace({
+      elapsedSec: job.elapsedSec,
+      epochs: job.epoch || job.totalEpochs,
+      audioSeconds: totalSeconds(),
+    });
     actions.innerHTML = "";
     actions.append(
       Button({ label: "Use in a cover", variant: "primary",
@@ -410,18 +553,44 @@ export function TrainFlow() {
     );
   }
 
+  /**
+   * A stopped run is not a failure, so it gets its own ending rather than the
+   * red one — and the panel has to stop claiming to be mid-step, which is what
+   * made Cancel look like it had done nothing.
+   */
+  function paintPanelCancelled(job) {
+    const actions = panel.querySelector(".trainpanel__actions");
+    if (!actions || actions.dataset.cancelled) return;
+    actions.dataset.cancelled = "1";
+    if (meterBar) meterBar.setReadout("stopped");
+    actions.innerHTML = "";
+    actions.append(
+      el("div", { class: "t-caption measure", style: { color: "var(--text-secondary)" } },
+        "Stopped. Any checkpoint already written is kept, so training this voice "
+        + "again resumes from it rather than starting over."),
+      Button({ label: "Close", variant: "secondary", size: "sm",
+        onClick: () => { jobId = null; paintPanel(); paintStart(); } }),
+    );
+  }
+
   function confirmCancel(job) {
-    const keep = Checkbox({ label: "Keep the checkpoint so far", checked: true });
     const sheet = Sheet({
       title: "Stop training?",
       body: el("div", { style: { display: "flex", flexDirection: "column", gap: "12px" } },
-        el("div", {}, "Training stops at the end of the current step, so this may take a moment."),
-        keep,
+        el("div", {}, "Vocalis signals the trainer and waits for it to put its "
+          + "workers down, so this takes a few seconds."),
+        el("div", { class: "t-caption", style: { color: "var(--text-secondary)" } },
+          "Any checkpoint already written is kept. Training this voice again "
+          + "resumes from it."),
       ),
       actions: [
         Button({ label: "Keep training", variant: "secondary", onClick: () => sheet.close() }),
         Button({ label: "Stop", variant: "destructive", fill: true,
-          onClick: () => { sheet.close(); cancelJob(job.id); } }),
+          onClick: () => {
+            sheet.close();
+            markCancelling();
+            cancelJob(job.id);
+          } }),
       ],
     });
   }
@@ -512,6 +681,15 @@ export function TrainFlow() {
       addPaths(paths);
     }),
   ];
+
+  // A run started here and then navigated away from is still going, in the
+  // store and in the sidecar. Adopt it so this view reports on it again rather
+  // than showing a fresh form over the top of live work.
+  const alreadyRunning = runningJobOfKind("train");
+  if (alreadyRunning) {
+    jobId = alreadyRunning.id;
+    meterBar = null;
+  }
 
   paintRecordings();
   paintPresets();

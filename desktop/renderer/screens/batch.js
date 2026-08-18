@@ -22,7 +22,9 @@ import { MeterBar } from "../components/meter/meter-bar.js";
 import { getState, set, subscribe } from "../app/store.js";
 import { exitFlow, setFlowDirtyCheck } from "../app/router.js";
 import { api, mediaUrl } from "../app/api.js";
-import { startBatch, cancelJob, getJob, COVER_STAGE_IDS } from "../app/jobs.js";
+import {
+  startBatch, cancelJob, getJob, runningJobOfKind, COVER_STAGE_IDS,
+} from "../app/jobs.js";
 import { toast } from "../app/toast.js";
 import { initials } from "../app/profile.js";
 import * as fmt from "../app/format.js";
@@ -490,6 +492,15 @@ export function BatchFlow() {
 
   if (!voiceId && voices().length) {
     voiceId = [...voices()].sort((a, b) => b.modified - a.modified)[0].name;
+  }
+
+  // Same for a batch, and here the queue itself comes back too: the job carries
+  // every song with its state, which is exactly what this view draws.
+  const runningBatch = runningJobOfKind("batch");
+  if (runningBatch) {
+    jobId = runningBatch.id;
+    voiceId = runningBatch.voiceId || voiceId;
+    songs = (runningBatch.items || []).map((i) => ({ path: i.path, name: i.name }));
   }
 
   paintSongs();
